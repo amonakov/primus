@@ -31,5 +31,5 @@ DEF_GLX_PROTO(int,          glXGetFrameUsageMESA,     (Display *dpy, GLXDrawable
 DEF_GLX_PROTO(int,          glXBeginFrameTrackingMESA,(Display *dpy, GLXDrawable drawable),drawable)
 DEF_GLX_PROTO(int,          glXEndFrameTrackingMESA,  (Display *dpy, GLXDrawable drawable),drawable)
 DEF_GLX_PROTO(int,          glXQueryFrameTrackingMESA,(Display *dpy, GLXDrawable drawable, int64_t *swapCount, int64_t *missedFrames, float *lastMissedUsage),drawable,swapCount,missedFrames,lastMissedUsage)
-DEF_GLX_PROTO(void,         glXBindTexImageEXT,       (Display *dpy, GLXDrawable drawable, int buffer, const int *attrib_list),drawable,buffer,attrib_list)
-DEF_GLX_PROTO(void,         glXReleaseTexImageEXT,    (Display *dpy, GLXDrawable drawable, int buffer),drawable,buffer)
+//DEF_GLX_PROTO(void,         glXBindTexImageEXT,       (Display *dpy, GLXDrawable drawable, int buffer, const int *attrib_list),drawable,buffer,attrib_list)
+//DEF_GLX_PROTO(void,         glXReleaseTexImageEXT,    (Display *dpy, GLXDrawable drawable, int buffer),drawable,buffer)

@@ -319,8 +319,14 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 
 __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 {
-  static const char * const redefined_fns[] = {
+  static const char * const redefined_names[] = {
 #define DEF_GLX_PROTO(ret, name, args, ...) #name,
+#include "redefined.def"
+#include "dispredir.def"
+#undef  DEF_GLX_PROTO
+  };
+  static const __GLXextFuncPtr redefined_fns[] = {
+#define DEF_GLX_PROTO(ret, name, args, ...) (__GLXextFuncPtr)name,
 #include "redefined.def"
 #include "dispredir.def"
 #undef  DEF_GLX_PROTO
@@ -329,9 +335,9 @@ __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
   primus_trace("glXGetProcAddress(\"%s\"): ", procName);
   enum {n_redefined = sizeof(redefined_fns) / sizeof(redefined_fns[0])};
   for (int i = 0; i < n_redefined; i++)
-    if (!strcmp((const char *)procName, redefined_fns[i]))
+    if (!strcmp((const char *)procName, redefined_names[i]))
     {
-      retval = (__GLXextFuncPtr) dlsym(RTLD_DEFAULT, (const char*)procName);
+      retval = redefined_fns[i];
       primus_trace("local %p\n", retval);
     }
   if (!retval)
@@ -347,8 +353,7 @@ __GLXextFuncPtr glXGetProcAddressARB(const GLubyte *procName)
   return glXGetProcAddress(procName);
 }
 
-extern GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config,
-                                 Window win, const int *attribList)
+GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
   primus_trace("%s\n", __func__);
   GLXWindow glxwin =  primus.dfns.glXCreateWindow(dpy, get_dpy_fbc(dpy, config), win, attribList);
