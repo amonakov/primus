@@ -50,7 +50,6 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
 static struct PrimusInfo {
   Display *adpy;
   CapturedFns afns;
-  void *mesa_glapi;
   CapturedFns dfns;
   DrawablesInfo drawables;
   std::map<GLXContext, GLXFBConfig> actx2fbconfig;
@@ -59,9 +58,11 @@ static struct PrimusInfo {
   PrimusInfo():
     adpy(XOpenDisplay(getenv("PRIMUS_DISPLAY"))),
     afns(getenv("PRIMUS_libGLa")),
-    mesa_glapi(dlopen("/usr/lib/libglapi.so", RTLD_LAZY|RTLD_GLOBAL)),
     dfns(getenv("PRIMUS_libGLd"))
   {
+    const char *load_global = getenv("PRIMUS_LOAD_GLOBAL");
+    if (load_global)
+      dlopen(load_global, RTLD_LAZY | RTLD_GLOBAL);
     XInitThreads();
   }
 } primus;

@@ -9,6 +9,9 @@ export PRIMUS_libGLa=${PRIMUS_libGLa:-/usr/lib/nvidia-bumblebee/libGL.so.1}
 # "Displaying" libGL
 export PRIMUS_libGLd=${PRIMUS_libGLd:-/usr/lib/libGL.so.1}
 
+# Mesa drivers need a few symbols to be visible
+export PRIMUS_LOAD_GLOBAL=${PRIMUS_LOAD_GLOBAL:-/usr/lib/libglapi.so}
+
 # Need functions from accelerating libGL to take precedence
 export LD_LIBRARY_PATH=$(dirname $PRIMUS_libGLa)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 
