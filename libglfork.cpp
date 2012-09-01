@@ -364,6 +364,12 @@ GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const in
   return glxwin;
 }
 
+void glXDestroyWindow(Display *dpy, GLXWindow window)
+{
+  primus.drawables.erase(window);
+  primus.dfns.glXDestroyWindow(dpy, window);
+}
+
 XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
 {
   primus_trace("%s\n", __func__);

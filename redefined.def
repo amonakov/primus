@@ -9,6 +9,7 @@ DEF_GLX_PROTO(__GLXextFuncPtr, glXGetProcAddressARB, (const GLubyte *))
 DEF_GLX_PROTO(__GLXextFuncPtr, glXGetProcAddress,    (const GLubyte *))
 
 DEF_GLX_PROTO(GLXWindow,    glXCreateWindow,          (Display *dpy, GLXFBConfig config, Window win, const int *attribList),config,win,attribList)
+DEF_GLX_PROTO(void,         glXDestroyWindow,         (Display *dpy, GLXWindow window),window)
 DEF_GLX_PROTO(XVisualInfo*, glXGetVisualFromFBConfig, (Display *dpy, GLXFBConfig config),config)
 DEF_GLX_PROTO(void,         glXQueryDrawable,         (Display *dpy, GLXDrawable draw, int attribute, unsigned int *value),draw,attribute,value)
 
