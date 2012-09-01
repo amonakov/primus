@@ -1,0 +1,14 @@
+DEF_GL_PROTO(void, glDrawPixels, (GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels))
+
+DEF_GL_PROTO(void, glReadPixels, (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid *pixels))
+DEF_GL_PROTO(void, glReadBuffer, (GLenum mode))
+DEF_GL_PROTO(void, glGetIntegerv,(GLenum pname, GLint *params ))
+
+DEF_GL_PROTO(void,     glGenBuffers, (GLsizei n, GLuint *buffers))
+DEF_GL_PROTO(void,     glBindBuffer, (GLenum target, GLuint buffer))
+DEF_GL_PROTO(void,     glBufferData, (GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage))
+DEF_GL_PROTO(GLvoid*,  glMapBuffer,  (GLenum target, GLenum access))
+DEF_GL_PROTO(GLboolean,glUnmapBuffer,(GLenum target))
+
+DEF_GL_PROTO(void,     glNewList,    (GLuint list, GLenum mode))
+DEF_GL_PROTO(void,     glEndList,    (void))
