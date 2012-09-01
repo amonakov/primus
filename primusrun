@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Secondary display
+export PRIMUS_DISPLAY=:8
+
+# "Accelerating" libGL
+export PRIMUS_libGLa=/usr/lib/nvidia-bumblebee/libGL.so.1
+
+# "Displaying" libGL
+export PRIMUS_libGLd=/usr/lib/libGL.so.1
+
+# Need functions from accelerating libGL to take precedence
+export LD_LIBRARY_PATH=$(dirname $PRIMUS_libGLa)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+
+# Inject the primus GLX forking library
+export LD_PRELOAD=$(dirname `readlink -ne $0`)/libGL.so.1${LD_PRELOAD:+:$LD_PRELOAD}
+
+# And go!
+exec "$@"
