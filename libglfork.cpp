@@ -104,6 +104,8 @@ static __thread struct TSPrimusInfo {
 
   void set_drawable(Display *dpy, GLXDrawable draw, GLXContext ctx)
   {
+    if (primus.drawables[draw].kind == DrawableInfo::Pbuffer)
+      return;
     if (!thread)
       init();
     pthread_mutex_lock(&d.amutex);
@@ -293,6 +295,8 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   } bufs;
   assert(primus.drawables.known(drawable));
   const DrawableInfo &di = primus.drawables[drawable];
+  if (di.kind == di.Pbuffer)
+    return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   bufs.update(di);
   int orig_read_buf;
   if (!bufs.first)
@@ -356,7 +360,7 @@ __GLXextFuncPtr glXGetProcAddressARB(const GLubyte *procName)
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
   primus_trace("%s\n", __func__);
-  GLXWindow glxwin =  primus.dfns.glXCreateWindow(dpy, get_dpy_fbc(dpy, config), win, attribList);
+  GLXWindow glxwin = primus.dfns.glXCreateWindow(dpy, get_dpy_fbc(dpy, config), win, attribList);
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
   di.fbconfig = config;
@@ -368,6 +372,23 @@ void glXDestroyWindow(Display *dpy, GLXWindow window)
 {
   primus.drawables.erase(window);
   primus.dfns.glXDestroyWindow(dpy, window);
+}
+
+GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
+{
+  primus_trace("%s\n", __func__);
+  GLXPbuffer pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, config, attribList);
+  DrawableInfo &di = primus.drawables[pbuffer];
+  di.kind = di.Pbuffer;
+  di.fbconfig = config;
+  di.pbuffer = pbuffer;
+  return pbuffer;
+}
+
+void glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf)
+{
+  primus.drawables.erase(pbuf);
+  primus.afns.glXDestroyPbuffer(primus.adpy, pbuf);
 }
 
 XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
