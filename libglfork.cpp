@@ -118,6 +118,11 @@ static __thread struct TSPrimusInfo {
     d.height = primus.drawables[draw].height;
     pthread_mutex_unlock(&d.amutex);
   }
+  void wait()
+  {
+    pthread_mutex_lock(&d.amutex);
+    pthread_mutex_unlock(&d.amutex);
+  }
 } tsprimus;
 
 static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs, GLXFBConfig **dcfgs)
@@ -211,6 +216,7 @@ GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType,
 
 void glXDestroyContext(Display *dpy, GLXContext ctx)
 {
+  tsprimus.wait();
   GLXContext dctx = primus.actx2dctx[ctx];
   primus.actx2dctx.erase(ctx);
   primus.actx2fbconfig.erase(ctx);
@@ -383,6 +389,7 @@ GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const in
 
 void glXDestroyWindow(Display *dpy, GLXWindow window)
 {
+  tsprimus.wait();
   primus.drawables.erase(window);
   primus.dfns.glXDestroyWindow(dpy, window);
 }
@@ -417,6 +424,7 @@ GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const
 
 void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
 {
+  tsprimus.wait();
   primus.drawables.erase(pixmap);
   primus.dfns.glXDestroyPixmap(dpy, pixmap);
 }
