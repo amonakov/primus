@@ -408,6 +408,24 @@ void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
   primus.dfns.glXDestroyPixmap(dpy, pixmap);
 }
 
+GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
+{
+  primus_trace("%s\n", __func__);
+  GLXPixmap glxpix = primus.dfns.glXCreateGLXPixmap(dpy, visual, pixmap);
+  DrawableInfo &di = primus.drawables[glxpix];
+  di.kind = di.Pixmap;
+  note_geometry(dpy, pixmap, di);
+  GLXFBConfig *acfgs, *dcfgs;
+  match_fbconfigs(dpy, visual, &acfgs, &dcfgs);
+  di.fbconfig = *acfgs;
+  return glxpix;
+}
+
+void glXDestroyGLXPixmap(Display *dpy, GLXPixmap pixmap)
+{
+  glXDestroyPixmap(dpy, pixmap);
+}
+
 XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
 {
   primus_trace("%s\n", __func__);

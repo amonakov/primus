@@ -1,8 +1,5 @@
-//FIXME Visual should be relative to ddpy
 //DEF_GLX_PROTO(XVisualInfo*, glXChooseVisual,          (Display *dpy, int screen, int *attribList),screen,attribList)
 DEF_GLX_PROTO(void,         glXCopyContext,           (Display *dpy, GLXContext src, GLXContext dst, unsigned long mask),src,dst,mask)
-DEF_GLX_PROTO(GLXPixmap,    glXCreateGLXPixmap,       (Display *dpy, XVisualInfo *visual, Pixmap pixmap),visual,pixmap)
-DEF_GLX_PROTO(void,         glXDestroyGLXPixmap,      (Display *dpy, GLXPixmap pixmap),pixmap)
 DEF_GLX_PROTO(Bool,         glXQueryExtension,        (Display *dpy, int *errorb, int *event),errorb,event)
 DEF_GLX_PROTO(Bool,         glXQueryVersion,          (Display *dpy, int *maj, int *min),maj,min)
 DEF_GLX_PROTO(Bool,         glXIsDirect,              (Display *dpy, GLXContext ctx),ctx)

@@ -14,6 +14,8 @@ DEF_GLX_PROTO(GLXPbuffer,   glXCreatePbuffer,         (Display *dpy, GLXFBConfig
 DEF_GLX_PROTO(void,         glXDestroyPbuffer,        (Display *dpy, GLXPbuffer pbuf),pbuf)
 DEF_GLX_PROTO(GLXPixmap,    glXCreatePixmap,          (Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList),config,pixmap,attribList)
 DEF_GLX_PROTO(void,         glXDestroyPixmap,         (Display *dpy, GLXPixmap pixmap),pixmap)
+DEF_GLX_PROTO(GLXPixmap,    glXCreateGLXPixmap,       (Display *dpy, XVisualInfo *visual, Pixmap pixmap),visual,pixmap)
+DEF_GLX_PROTO(void,         glXDestroyGLXPixmap,      (Display *dpy, GLXPixmap pixmap),pixmap)
 DEF_GLX_PROTO(XVisualInfo*, glXGetVisualFromFBConfig, (Display *dpy, GLXFBConfig config),config)
 DEF_GLX_PROTO(void,         glXQueryDrawable,         (Display *dpy, GLXDrawable draw, int attribute, unsigned int *value),draw,attribute,value)
 
