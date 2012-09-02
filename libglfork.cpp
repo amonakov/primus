@@ -390,8 +390,10 @@ GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const in
 void glXDestroyWindow(Display *dpy, GLXWindow window)
 {
   tsprimus.wait();
-  primus.drawables.erase(window);
   primus.dfns.glXDestroyWindow(dpy, window);
+  if (primus.drawables[window].pbuffer)
+    primus.afns.glXDestroyPbuffer(primus.adpy, primus.drawables[window].pbuffer);
+  primus.drawables.erase(window);
 }
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
@@ -425,8 +427,10 @@ GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const
 void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
 {
   tsprimus.wait();
-  primus.drawables.erase(pixmap);
   primus.dfns.glXDestroyPixmap(dpy, pixmap);
+  if (primus.drawables[pixmap].pbuffer)
+    primus.afns.glXDestroyPbuffer(primus.adpy, primus.drawables[pixmap].pbuffer);
+  primus.drawables.erase(pixmap);
 }
 
 GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
