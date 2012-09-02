@@ -272,6 +272,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
 
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 {
+  static bool dropframes = getenv("PRIMUS_DROPFRAMES");
   static __thread struct {
     GLuint pbos[2];
     int cbuf;
@@ -299,7 +300,12 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   bufs.update(di);
   int orig_read_buf;
   if (!bufs.first)
-    pthread_mutex_lock(&tsprimus.d.amutex);
+  {
+    if (!dropframes)
+      pthread_mutex_lock(&tsprimus.d.amutex);
+    else if (pthread_mutex_trylock(&tsprimus.d.amutex))
+      return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
+  }
   primus.afns.glGetIntegerv(GL_READ_BUFFER, &orig_read_buf);
   primus.afns.glReadBuffer(GL_BACK);
   primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, bufs.pbos[bufs.cbuf]);
