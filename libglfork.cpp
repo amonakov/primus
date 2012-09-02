@@ -63,6 +63,8 @@ static struct PrimusInfo {
     needed_global(dlopen(getenv("PRIMUS_LOAD_GLOBAL"), RTLD_LAZY | RTLD_GLOBAL)),
     dfns(getenv("PRIMUS_libGLd"))
   {
+    if (afns.handle == dfns.handle && strcmp(getenv("PRIMUS_libGLa"), getenv("PRIMUS_libGLd")))
+      primus_trace("primus: warning: unexpectedly got same libGL for rendering and display\n");
     XInitThreads();
   }
 } primus;
