@@ -167,15 +167,15 @@ static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs,
 
 GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList, Bool direct)
 {
+  primus_trace("%s\n", __func__);
   GLXFBConfig *acfgs, *dcfgs;
   match_fbconfigs(dpy, vis, &acfgs, &dcfgs);
-  primus_trace("glXCreateContext: dctx = ");
   GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, *dcfgs, GLX_RGBA_TYPE, shareList, direct);
-  primus_trace("%p, actx = ", dctx);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, shareList, direct);
-  primus_trace("%p\n", actx);
   primus.actx2dctx[actx] = dctx;
   primus.actx2fbconfig[actx] = *acfgs;;
+  if (direct && !primus.dfns.glXIsDirect(dpy, dctx))
+    primus_trace("primus: warning: failed to acquire direct rendering context for display thread\n");
   return actx;
 }
 
@@ -197,13 +197,13 @@ static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg)
 
 GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType, GLXContext shareList, Bool direct)
 {
-  primus_trace("glXCreateNewContext: dctx = ");
+  primus_trace("%s\n", __func__);
   GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, get_dpy_fbc(dpy, config), renderType, shareList, direct);
-  primus_trace("%p, actx = ", dctx);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, shareList, direct);
-  primus_trace("%p\n", actx);
   primus.actx2dctx[actx] = dctx;
   primus.actx2fbconfig[actx] = config;
+  if (direct && !primus.dfns.glXIsDirect(dpy, dctx))
+    primus_trace("primus: warning: failed to acquire direct rendering context for display thread\n");
   return actx;
 }
 
