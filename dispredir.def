@@ -13,8 +13,6 @@ DEF_GLX_PROTO(const char*,  glXGetClientString,       (Display *dpy, int name),n
 DEF_GLX_PROTO(GLXFBConfig*, glXChooseFBConfig,        (Display *dpy, int screen, const int *attribList, int *nitems),screen,attribList,nitems)
 DEF_GLX_PROTO(int,          glXGetFBConfigAttrib,     (Display *dpy, GLXFBConfig config, int attribute, int *value),config,attribute,value)
 DEF_GLX_PROTO(GLXFBConfig*, glXGetFBConfigs,          (Display *dpy, int screen, int *nelements),screen,nelements)
-DEF_GLX_PROTO(GLXPixmap,    glXCreatePixmap,          (Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList),config,pixmap,attribList)
-DEF_GLX_PROTO(void,         glXDestroyPixmap,         (Display *dpy, GLXPixmap pixmap),pixmap)
 DEF_GLX_PROTO(int,          glXQueryContext,          (Display *dpy, GLXContext ctx, int attribute, int *value),ctx,attribute,value)
 DEF_GLX_PROTO(void,         glXSelectEvent,           (Display *dpy, GLXDrawable drawable, unsigned long mask),drawable,mask)
 DEF_GLX_PROTO(void,         glXGetSelectedEvent,      (Display *dpy, GLXDrawable drawable, unsigned long *mask),drawable,mask)

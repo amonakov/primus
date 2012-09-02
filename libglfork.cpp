@@ -391,6 +391,23 @@ void glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf)
   primus.afns.glXDestroyPbuffer(primus.adpy, pbuf);
 }
 
+GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList)
+{
+  primus_trace("%s\n", __func__);
+  GLXPixmap glxpix = primus.dfns.glXCreatePixmap(dpy, get_dpy_fbc(dpy, config), pixmap, attribList);
+  DrawableInfo &di = primus.drawables[glxpix];
+  di.kind = di.Pixmap;
+  di.fbconfig = config;
+  note_geometry(dpy, pixmap, di);
+  return glxpix;
+}
+
+void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
+{
+  primus.drawables.erase(pixmap);
+  primus.dfns.glXDestroyPixmap(dpy, pixmap);
+}
+
 XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
 {
   primus_trace("%s\n", __func__);
