@@ -23,6 +23,7 @@ struct CapturedFns {
     assert(lib && lib[0] == '/');
     handle = dlopen(lib, RTLD_LAZY);
     primus_trace("loading %s: %p\n", lib, handle);
+    assert(handle);
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)dlsym(handle, #name);
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
