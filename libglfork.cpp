@@ -12,8 +12,8 @@
 struct CapturedFns {
   void *handle;
 #define DEF_GLX_PROTO(ret, name, args, ...) ret (*name) args;
-#include "redefined.def"
-#include "dispredir.def"
+#include "glx-reimpl.def"
+#include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
 #define DEF_GL_PROTO(ret, name, args, ...) ret (*name) args;
 #include "gl-needed.def"
@@ -24,8 +24,8 @@ struct CapturedFns {
     handle = dlopen(lib, RTLD_LAZY);
     primus_trace("loading %s: %p\n", lib, handle);
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)dlsym(handle, #name);
-#include "redefined.def"
-#include "dispredir.def"
+#include "glx-reimpl.def"
+#include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
 #define DEF_GL_PROTO(ret, name, args, ...) name = (ret (*) args)this->glXGetProcAddress((GLubyte*)#name);
 #include "gl-needed.def"
@@ -325,14 +325,14 @@ __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 {
   static const char * const redefined_names[] = {
 #define DEF_GLX_PROTO(ret, name, args, ...) #name,
-#include "redefined.def"
-#include "dispredir.def"
+#include "glx-reimpl.def"
+#include "glx-dpyredir.def"
 #undef  DEF_GLX_PROTO
   };
   static const __GLXextFuncPtr redefined_fns[] = {
 #define DEF_GLX_PROTO(ret, name, args, ...) (__GLXextFuncPtr)name,
-#include "redefined.def"
-#include "dispredir.def"
+#include "glx-reimpl.def"
+#include "glx-dpyredir.def"
 #undef  DEF_GLX_PROTO
   };
   __GLXextFuncPtr retval = NULL;
@@ -451,5 +451,5 @@ void glXUseXFont(Font font, int first, int count, int list)
 #define DEF_GLX_PROTO(ret, name, par, ...) \
 ret name par \
 { primus_trace("%s\n", #name); return primus.afns.name(primus.adpy, __VA_ARGS__); }
-#include "dispredir.def"
+#include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
