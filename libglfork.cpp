@@ -320,6 +320,11 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   bufs.cbuf ^= 1;
 }
 
+int glXSwapIntervalSGI(int interval)
+{
+  return 1; // Indicate failure to set swapinterval
+}
+
 __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 {
   static const char * const redefined_names[] = {
@@ -433,6 +438,7 @@ XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
 
 void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned int *value)
 {
+  primus_trace("%s\n", __func__);
   assert(primus.drawables.known(draw));
   primus.afns.glXQueryDrawable(primus.adpy, primus.drawables[draw].pbuffer, attribute, value);
 }
