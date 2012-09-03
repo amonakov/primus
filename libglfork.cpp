@@ -350,6 +350,17 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
     asm volatile ("" : : : "memory");
     pthread_mutex_unlock(&tsprimus.d.dmutex);
   }
+  else
+  {
+    primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, bufs.pbos[bufs.cbuf]);
+    GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
+    assert(pixeldata);
+    tsprimus.d.buf = pixeldata;
+    asm volatile ("" : : : "memory");
+    pthread_mutex_unlock(&tsprimus.d.dmutex);
+    pthread_mutex_lock(&tsprimus.d.amutex);
+    primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
+  }
   bufs.first = false;
   bufs.cbuf ^= 1;
 }
