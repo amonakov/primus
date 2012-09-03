@@ -14,10 +14,10 @@ struct CapturedFns {
 #define DEF_GLX_PROTO(ret, name, args, ...) ret (*name) args;
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
-#undef DEF_GLX_PROTO
-#define DEF_GL_PROTO(ret, name, args, ...) ret (*name) args;
+#include "glxext-reimpl.def"
+#include "glxext-dpyredir.def"
 #include "gl-needed.def"
-#undef DEF_GL_PROTO
+#undef DEF_GLX_PROTO
   CapturedFns(const char *lib)
   {
     assert(lib && lib[0] == '/');
@@ -28,9 +28,11 @@ struct CapturedFns {
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
-#define DEF_GL_PROTO(ret, name, args, ...) name = (ret (*) args)this->glXGetProcAddress((GLubyte*)#name);
+#define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)this->glXGetProcAddress((GLubyte*)#name);
+#include "glxext-reimpl.def"
+#include "glxext-dpyredir.def"
 #include "gl-needed.def"
-#undef DEF_GL_PROTO
+#undef DEF_GLX_PROTO
   }
 };
 
@@ -435,8 +437,16 @@ void glXUseXFont(Font font, int first, int count, int list)
 
 #define DEF_GLX_PROTO(ret, name, par, ...) \
 ret name par \
-{ primus_trace("%s\n", #name); return primus.afns.name(primus.adpy, __VA_ARGS__); }
+{ primus_trace("primus: blindly redirecting dpy for %s\n", #name); \
+  return primus.afns.name(primus.adpy, __VA_ARGS__); }
 #include "glx-dpyredir.def"
+#undef DEF_GLX_PROTO
+
+#define DEF_GLX_PROTO(ret, name, par, dpy, ...) \
+extern "C" ret name par \
+{ primus_trace("primus: blindly redirecting dpy for %s\n", #name); \
+  return primus.afns.name(primus.adpy, __VA_ARGS__); }
+#include "glxext-dpyredir.def"
 #undef DEF_GLX_PROTO
 
 // GLX extensions
@@ -453,6 +463,7 @@ __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 #include "glx-reimpl.def"
 #include "glxext-reimpl.def"
 #include "glx-dpyredir.def"
+#include "glxext-dpyredir.def"
 #undef  DEF_GLX_PROTO
   };
   static const __GLXextFuncPtr redefined_fns[] = {
@@ -460,6 +471,7 @@ __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 #include "glx-reimpl.def"
 #include "glxext-reimpl.def"
 #include "glx-dpyredir.def"
+#include "glxext-dpyredir.def"
 #undef  DEF_GLX_PROTO
   };
   __GLXextFuncPtr retval = NULL;
