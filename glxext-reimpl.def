@@ -1,0 +1,2 @@
+DEF_GLX_PROTO(int,          glXSwapIntervalSGI,       (int interval))
+

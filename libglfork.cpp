@@ -335,47 +335,6 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   bufs.cbuf ^= 1;
 }
 
-int glXSwapIntervalSGI(int interval)
-{
-  return 1; // Indicate failure to set swapinterval
-}
-
-__GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
-{
-  static const char * const redefined_names[] = {
-#define DEF_GLX_PROTO(ret, name, args, ...) #name,
-#include "glx-reimpl.def"
-#include "glx-dpyredir.def"
-#undef  DEF_GLX_PROTO
-  };
-  static const __GLXextFuncPtr redefined_fns[] = {
-#define DEF_GLX_PROTO(ret, name, args, ...) (__GLXextFuncPtr)name,
-#include "glx-reimpl.def"
-#include "glx-dpyredir.def"
-#undef  DEF_GLX_PROTO
-  };
-  __GLXextFuncPtr retval = NULL;
-  primus_trace("glXGetProcAddress(\"%s\"): ", procName);
-  enum {n_redefined = sizeof(redefined_fns) / sizeof(redefined_fns[0])};
-  for (int i = 0; i < n_redefined; i++)
-    if (!strcmp((const char *)procName, redefined_names[i]))
-    {
-      retval = redefined_fns[i];
-      primus_trace("local %p\n", retval);
-    }
-  if (!retval)
-  {
-    retval = primus.afns.glXGetProcAddress(procName);
-    primus_trace("native %p\n", retval);
-  }
-  return retval;
-}
-
-__GLXextFuncPtr glXGetProcAddressARB(const GLubyte *procName)
-{
-  return glXGetProcAddress(procName);
-}
-
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
   primus_trace("%s\n", __func__);
@@ -479,3 +438,48 @@ ret name par \
 { primus_trace("%s\n", #name); return primus.afns.name(primus.adpy, __VA_ARGS__); }
 #include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
+
+// GLX extensions
+
+extern "C" int glXSwapIntervalSGI(int interval)
+{
+  return 1; // Indicate failure to set swapinterval
+}
+
+__GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
+{
+  static const char * const redefined_names[] = {
+#define DEF_GLX_PROTO(ret, name, args, ...) #name,
+#include "glx-reimpl.def"
+#include "glxext-reimpl.def"
+#include "glx-dpyredir.def"
+#undef  DEF_GLX_PROTO
+  };
+  static const __GLXextFuncPtr redefined_fns[] = {
+#define DEF_GLX_PROTO(ret, name, args, ...) (__GLXextFuncPtr)name,
+#include "glx-reimpl.def"
+#include "glxext-reimpl.def"
+#include "glx-dpyredir.def"
+#undef  DEF_GLX_PROTO
+  };
+  __GLXextFuncPtr retval = NULL;
+  primus_trace("glXGetProcAddress(\"%s\"): ", procName);
+  enum {n_redefined = sizeof(redefined_fns) / sizeof(redefined_fns[0])};
+  for (int i = 0; i < n_redefined; i++)
+    if (!strcmp((const char *)procName, redefined_names[i]))
+    {
+      retval = redefined_fns[i];
+      primus_trace("local %p\n", retval);
+    }
+  if (!retval)
+  {
+    retval = primus.afns.glXGetProcAddress(procName);
+    primus_trace("native %p\n", retval);
+  }
+  return retval;
+}
+
+__GLXextFuncPtr glXGetProcAddressARB(const GLubyte *procName)
+{
+  return glXGetProcAddress(procName);
+}

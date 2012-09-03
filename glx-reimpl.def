@@ -20,4 +20,3 @@ DEF_GLX_PROTO(XVisualInfo*, glXGetVisualFromFBConfig, (Display *dpy, GLXFBConfig
 DEF_GLX_PROTO(void,         glXQueryDrawable,         (Display *dpy, GLXDrawable draw, int attribute, unsigned int *value),draw,attribute,value)
 
 DEF_GLX_PROTO(void,         glXUseXFont,              (Font font, int first, int count, int list))
-DEF_GLX_PROTO(int,          glXSwapIntervalSGI,       (int interval))
