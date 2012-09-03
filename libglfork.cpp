@@ -132,6 +132,17 @@ static __thread struct TSPrimusInfo {
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[1]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
     }
+    void drop()
+    {
+      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[0]);
+      primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
+      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, 0, NULL, GL_STREAM_READ);
+      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[1]);
+      primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
+      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, 0, NULL, GL_STREAM_READ);
+      // FIXME delete them as well
+      width = height = 0;
+    }
   } bufs;
 } tsprimus;
 
@@ -289,6 +300,7 @@ Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
   GLXContext dctx = ctx ? primus.actx2dctx[ctx] : NULL;
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
   tsprimus.d.set_drawable(dpy, drawable, dctx);
+  tsprimus.bufs.drop();
   return primus.afns.glXMakeCurrent(primus.adpy, pbuffer, ctx);
 }
 
@@ -301,6 +313,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
   tsprimus.d.set_drawable(dpy, draw, dctx);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
+  tsprimus.bufs.drop();
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
 
