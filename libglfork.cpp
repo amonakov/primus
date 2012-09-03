@@ -179,7 +179,7 @@ GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList
   primus_trace("%s\n", __func__);
   GLXFBConfig *acfgs, *dcfgs;
   match_fbconfigs(dpy, vis, &acfgs, &dcfgs);
-  GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, *dcfgs, GLX_RGBA_TYPE, shareList, direct);
+  GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, *dcfgs, GLX_RGBA_TYPE, NULL, direct);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, shareList, direct);
   primus.actx2dctx[actx] = dctx;
   primus.actx2fbconfig[actx] = *acfgs;;
@@ -207,7 +207,7 @@ static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg)
 GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType, GLXContext shareList, Bool direct)
 {
   primus_trace("%s\n", __func__);
-  GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, get_dpy_fbc(dpy, config), renderType, shareList, direct);
+  GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, get_dpy_fbc(dpy, config), renderType, NULL, direct);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, shareList, direct);
   primus.actx2dctx[actx] = dctx;
   primus.actx2fbconfig[actx] = config;
