@@ -56,6 +56,7 @@ static struct PrimusInfo {
   const void *needed_global;
   CapturedFns dfns;
   DrawablesInfo drawables;
+  // FIXME: there are race conditions in accesses to these
   std::map<GLXContext, GLXFBConfig> actx2fbconfig;
   std::map<GLXContext, GLXContext> actx2dctx;
 
@@ -72,60 +73,62 @@ static struct PrimusInfo {
 } primus;
 
 static __thread struct TSPrimusInfo {
-  pthread_t thread;
+
+  static void* tsprimus_work(void *vd);
 
   struct D {
+    pthread_t thread;
     pthread_mutex_t dmutex, amutex;
     int width, height;
     GLvoid *buf;
     Display *dpy;
     GLXDrawable drawable;
     GLXContext context;
-  } d;
 
-  static void* tsprimus_work(void *vd)
-  {
-    struct D &d = *(D *)vd;
-    for (;;)
+    void init()
     {
-      pthread_mutex_lock(&d.dmutex);
-      asm volatile ("" : : : "memory");
-      primus.dfns.glXMakeCurrent(d.dpy, d.drawable, d.context);
-      primus.dfns.glDrawPixels(d.width, d.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
-      pthread_mutex_unlock(&d.amutex);
-      primus.dfns.glXSwapBuffers(d.dpy, d.drawable);
+      pthread_mutex_init(&dmutex, NULL);
+      pthread_mutex_lock(&dmutex);
+      pthread_mutex_init(&amutex, NULL);
+      pthread_create(&thread, NULL, tsprimus_work, (void*)this);
     }
-    return NULL;
-  }
 
-  void init()
-  {
-    pthread_mutex_init(&d.dmutex, NULL);
-    pthread_mutex_lock(&d.dmutex);
-    pthread_mutex_init(&d.amutex, NULL);
-    pthread_create(&thread, NULL, tsprimus_work, (void*)&d);
-  }
-
-  void set_drawable(Display *dpy, GLXDrawable draw, GLXContext ctx)
-  {
-    if (primus.drawables[draw].kind == DrawableInfo::Pbuffer)
-      return;
-    if (!thread)
-      init();
-    pthread_mutex_lock(&d.amutex);
-    d.dpy = dpy;
-    d.drawable = draw;
-    d.context = ctx;
-    d.width  = primus.drawables[draw].width;
-    d.height = primus.drawables[draw].height;
-    pthread_mutex_unlock(&d.amutex);
-  }
-  void wait()
-  {
-    pthread_mutex_lock(&d.amutex);
-    pthread_mutex_unlock(&d.amutex);
-  }
+    void set_drawable(Display *dpy, GLXDrawable draw, GLXContext ctx)
+    {
+      if (primus.drawables[draw].kind == DrawableInfo::Pbuffer)
+	return;
+      if (!thread)
+	init();
+      pthread_mutex_lock(&amutex);
+      this->dpy = dpy;
+      this->drawable = draw;
+      this->context = ctx;
+      this->width  = primus.drawables[draw].width;
+      this->height = primus.drawables[draw].height;
+      pthread_mutex_unlock(&amutex);
+    }
+    void wait()
+    {
+      pthread_mutex_lock(&amutex);
+      pthread_mutex_unlock(&amutex);
+    }
+  } d;
 } tsprimus;
+
+void* TSPrimusInfo::tsprimus_work(void *vd)
+{
+  struct D &d = *(D *)vd;
+  for (;;)
+  {
+    pthread_mutex_lock(&d.dmutex);
+    asm volatile ("" : : : "memory");
+    primus.dfns.glXMakeCurrent(d.dpy, d.drawable, d.context);
+    primus.dfns.glDrawPixels(d.width, d.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
+    pthread_mutex_unlock(&d.amutex);
+    primus.dfns.glXSwapBuffers(d.dpy, d.drawable);
+  }
+  return NULL;
+}
 
 static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs, GLXFBConfig **dcfgs)
 {
@@ -218,7 +221,7 @@ GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType,
 
 void glXDestroyContext(Display *dpy, GLXContext ctx)
 {
-  tsprimus.wait();
+  tsprimus.d.wait();
   GLXContext dctx = primus.actx2dctx[ctx];
   primus.actx2dctx.erase(ctx);
   primus.actx2fbconfig.erase(ctx);
@@ -265,7 +268,7 @@ Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
   primus_trace("%s\n", __func__);
   GLXContext dctx = ctx ? primus.actx2dctx[ctx] : NULL;
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
-  tsprimus.set_drawable(dpy, drawable, dctx);
+  tsprimus.d.set_drawable(dpy, drawable, dctx);
   return primus.afns.glXMakeCurrent(primus.adpy, pbuffer, ctx);
 }
 
@@ -276,7 +279,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
     return glXMakeCurrent(dpy, draw, ctx);
   GLXContext dctx = ctx ? primus.actx2dctx[ctx] : NULL;
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
-  tsprimus.set_drawable(dpy, draw, dctx);
+  tsprimus.d.set_drawable(dpy, draw, dctx);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
@@ -350,7 +353,7 @@ GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const in
 
 void glXDestroyWindow(Display *dpy, GLXWindow window)
 {
-  tsprimus.wait();
+  tsprimus.d.wait();
   primus.dfns.glXDestroyWindow(dpy, window);
   if (primus.drawables[window].pbuffer)
     primus.afns.glXDestroyPbuffer(primus.adpy, primus.drawables[window].pbuffer);
@@ -387,7 +390,7 @@ GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const
 
 void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
 {
-  tsprimus.wait();
+  tsprimus.d.wait();
   primus.dfns.glXDestroyPixmap(dpy, pixmap);
   if (primus.drawables[pixmap].pbuffer)
     primus.afns.glXDestroyPbuffer(primus.adpy, primus.drawables[pixmap].pbuffer);
