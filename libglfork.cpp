@@ -113,6 +113,26 @@ static __thread struct TSPrimusInfo {
       pthread_mutex_unlock(&amutex);
     }
   } d;
+  struct A {
+    GLuint pbos[2];
+    int cbuf;
+    int width, height;
+    bool first;
+
+    void update(const DrawableInfo& di)
+    {
+      if (width == di.width && height == di.height)
+	return;
+      width = di.width; height = di.height;
+      first = true;
+      if (!pbos[0])
+	primus.afns.glGenBuffers(2, &pbos[0]);
+      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[0]);
+      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
+      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[1]);
+      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
+    }
+  } bufs;
 } tsprimus;
 
 void* TSPrimusInfo::tsprimus_work(void *vd)
@@ -287,26 +307,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 {
   static bool dropframes = getenv("PRIMUS_DROPFRAMES");
-  static __thread struct {
-    GLuint pbos[2];
-    int cbuf;
-    int width, height;
-    bool first;
-
-    void update(const DrawableInfo& di)
-    {
-      if (width == di.width && height == di.height)
-	return;
-      width = di.width; height = di.height;
-      first = true;
-      if (!pbos[0])
-	primus.afns.glGenBuffers(2, &pbos[0]);
-      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[0]);
-      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
-      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[1]);
-      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
-    }
-  } bufs;
+  TSPrimusInfo::A& bufs = tsprimus.bufs;
   assert(primus.drawables.known(drawable));
   const DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer)
