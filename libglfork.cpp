@@ -16,6 +16,7 @@ struct CapturedFns {
 #include "glx-dpyredir.def"
 #include "glxext-reimpl.def"
 #include "glxext-dpyredir.def"
+#include "gl-passthru.def"
 #include "gl-needed.def"
 #undef DEF_GLX_PROTO
   CapturedFns(const char *lib)
@@ -31,6 +32,7 @@ struct CapturedFns {
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)this->glXGetProcAddress((GLubyte*)#name);
 #include "glxext-reimpl.def"
 #include "glxext-dpyredir.def"
+#include "gl-passthru.def"
 #include "gl-needed.def"
 #undef DEF_GLX_PROTO
   }
@@ -535,6 +537,12 @@ extern "C" ret name par \
 { primus_trace("primus: blindly redirecting dpy for %s\n", #name); \
   return primus.afns.name(primus.adpy, __VA_ARGS__); }
 #include "glxext-dpyredir.def"
+#undef DEF_GLX_PROTO
+
+#define DEF_GLX_PROTO(ret, name, par, ...) \
+ret name par \
+{ return primus.afns.name(__VA_ARGS__); }
+#include "gl-passthru.def"
 #undef DEF_GLX_PROTO
 
 // GLX extensions
