@@ -84,6 +84,7 @@ static __thread struct TSPrimusInfo {
     Display *dpy;
     GLXDrawable drawable;
     GLXContext context;
+    bool reinit;
 
     void init()
     {
@@ -105,6 +106,7 @@ static __thread struct TSPrimusInfo {
       this->context = ctx;
       this->width  = primus.drawables[draw].width;
       this->height = primus.drawables[draw].height;
+      this->reinit = true;
       pthread_mutex_unlock(&amutex);
     }
     void wait()
@@ -153,8 +155,25 @@ void* TSPrimusInfo::tsprimus_work(void *vd)
   {
     pthread_mutex_lock(&d.dmutex);
     asm volatile ("" : : : "memory");
-    primus.dfns.glXMakeCurrent(d.dpy, d.drawable, d.context);
-    primus.dfns.glDrawPixels(d.width, d.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
+    if (d.reinit)
+    {
+      d.reinit = false;
+      primus.dfns.glXMakeCurrent(d.dpy, d.drawable, d.context);
+      float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
+      float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
+      primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
+      primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
+      primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
+      primus.dfns.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+      GLuint quad_texture;
+      primus.dfns.glGenTextures(1, &quad_texture);
+      primus.dfns.glBindTexture(GL_TEXTURE_2D, quad_texture);
+      primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, d.width, d.height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+      primus.dfns.glEnable(GL_TEXTURE_2D);
+    }
+    primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, d.width, d.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
+    primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     pthread_mutex_unlock(&d.amutex);
     primus.dfns.glXSwapBuffers(d.dpy, d.drawable);
   }
