@@ -82,7 +82,7 @@ static __thread struct TSPrimusInfo {
     int width, height;
     GLvoid *buf;
     Display *dpy;
-    GLXDrawable drawable;
+    GLXDrawable drawable, read_drawable;
     GLXContext context;
     bool reinit;
 
@@ -94,7 +94,7 @@ static __thread struct TSPrimusInfo {
       pthread_create(&thread, NULL, tsprimus_work, (void*)this);
     }
 
-    void set_drawable(Display *dpy, GLXDrawable draw, GLXContext ctx)
+    void set_drawable(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext ctx)
     {
       if (primus.drawables[draw].kind == DrawableInfo::Pbuffer)
 	return;
@@ -103,6 +103,7 @@ static __thread struct TSPrimusInfo {
       pthread_mutex_lock(&amutex);
       this->dpy = dpy;
       this->drawable = draw;
+      this->read_drawable = read;
       this->context = ctx;
       this->width  = primus.drawables[draw].width;
       this->height = primus.drawables[draw].height;
@@ -318,7 +319,7 @@ Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
   primus_trace("%s\n", __func__);
   GLXContext dctx = ctx ? primus.actx2dctx[ctx] : NULL;
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
-  tsprimus.d.set_drawable(dpy, drawable, dctx);
+  tsprimus.d.set_drawable(dpy, drawable, drawable, dctx);
   tsprimus.bufs.drop();
   return primus.afns.glXMakeCurrent(primus.adpy, pbuffer, ctx);
 }
@@ -330,7 +331,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
     return glXMakeCurrent(dpy, draw, ctx);
   GLXContext dctx = ctx ? primus.actx2dctx[ctx] : NULL;
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
-  tsprimus.d.set_drawable(dpy, draw, dctx);
+  tsprimus.d.set_drawable(dpy, draw, read, dctx);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
   tsprimus.bufs.drop();
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
@@ -480,6 +481,46 @@ void glXUseXFont(Font font, int first, int count, int list)
     primus.afns.glNewList(list + i, GL_COMPILE);
     primus.afns.glEndList();
   }
+}
+
+GLXContext glXGetCurrentContext(void)
+{
+  return tsprimus.d.context;
+}
+
+GLXDrawable glXGetCurrentDrawable(void)
+{
+  return tsprimus.d.drawable;
+}
+
+void glXWaitGL(void)
+{
+  // FIXME: implement for single-buffered apps
+}
+
+void glXWaitX(void)
+{
+  // FIXME: implement for single-buffered apps
+}
+
+Display *glXGetCurrentDisplay(void)
+{
+  return tsprimus.d.dpy;
+}
+
+GLXDrawable glXGetCurrentReadDrawable(void)
+{
+  return tsprimus.d.read_drawable;
+}
+
+XVisualInfo* glXChooseVisual(Display *dpy, int screen, int *attribList)
+{
+  return primus.dfns.glXChooseVisual(dpy, screen, attribList);
+}
+
+int glXGetConfig(Display *dpy, XVisualInfo *visual, int attrib, int *value)
+{
+  return primus.dfns.glXGetConfig(dpy, visual, attrib, value);
 }
 
 #define DEF_GLX_PROTO(ret, name, par, ...) \

@@ -19,4 +19,13 @@ DEF_GLX_PROTO(void,         glXDestroyGLXPixmap,      (Display *dpy, GLXPixmap p
 DEF_GLX_PROTO(XVisualInfo*, glXGetVisualFromFBConfig, (Display *dpy, GLXFBConfig config),config)
 DEF_GLX_PROTO(void,         glXQueryDrawable,         (Display *dpy, GLXDrawable draw, int attribute, unsigned int *value),draw,attribute,value)
 
+DEF_GLX_PROTO(XVisualInfo*, glXChooseVisual,          (Display *dpy, int screen, int *attribList),screen,attribList)
+DEF_GLX_PROTO(int,          glXGetConfig,             (Display *dpy, XVisualInfo *visual, int attrib, int *value),visual,attrib,value)
+
 DEF_GLX_PROTO(void,         glXUseXFont,              (Font font, int first, int count, int list))
+DEF_GLX_PROTO(GLXContext,   glXGetCurrentContext,     (void))
+DEF_GLX_PROTO(GLXDrawable,  glXGetCurrentDrawable,    (void))
+DEF_GLX_PROTO(void,         glXWaitGL,                (void))
+DEF_GLX_PROTO(void,         glXWaitX,                 (void))
+DEF_GLX_PROTO(Display*,     glXGetCurrentDisplay,     (void))
+DEF_GLX_PROTO(GLXDrawable,  glXGetCurrentReadDrawable,(void))
