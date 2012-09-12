@@ -1,5 +1,6 @@
 #include <dlfcn.h>
 #include <pthread.h>
+#include <time.h>
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -88,6 +89,39 @@ static __thread struct TSPrimusInfo {
     GLXContext context;
     bool reinit;
 
+    struct {
+      enum State {Wait, Upload, DrawSwap, NStates} state;
+      double state_time[NStates];
+      double prev_timestamp, old_timestamp;
+      int nframes;
+
+      void init()
+      {
+	struct timespec tp;
+	clock_gettime(CLOCK_MONOTONIC, &tp);
+	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+	prev_timestamp = old_timestamp = timestamp;
+      }
+      void tick()
+      {
+	struct timespec tp;
+	clock_gettime(CLOCK_MONOTONIC, &tp);
+	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+	state_time[state] += timestamp - prev_timestamp;
+	state = (State)((state + 1) % NStates);
+	prev_timestamp = timestamp;
+	nframes += !!(state == Wait);
+	double period = timestamp - old_timestamp;
+	if (state != Wait || period < 5)
+	  return;
+	primus_trace("primus: profiling: display: %.1f fps, %.1f%% wait, %.1f%% upload, %.1f%% draw+swap\n", nframes / period,
+	             100 * state_time[Wait] / period, 100 * state_time[Upload] / period, 100 * state_time[DrawSwap] / period);
+	old_timestamp = timestamp;
+	nframes = 0;
+	memset(state_time, 0, sizeof(state_time));
+      }
+    } profiler;
+
     void init()
     {
       pthread_mutex_init(&dmutex, NULL);
@@ -154,9 +188,11 @@ static __thread struct TSPrimusInfo {
 void* TSPrimusInfo::tsprimus_work(void *vd)
 {
   struct D &d = *(D *)vd;
+  d.profiler.init();
   for (;;)
   {
     pthread_mutex_lock(&d.dmutex);
+    d.profiler.tick();
     asm volatile ("" : : : "memory");
     if (d.reinit)
     {
@@ -176,9 +212,11 @@ void* TSPrimusInfo::tsprimus_work(void *vd)
       primus.dfns.glEnable(GL_TEXTURE_2D);
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, d.width, d.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
+    d.profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     pthread_mutex_unlock(&d.amutex);
     primus.dfns.glXSwapBuffers(d.dpy, d.drawable);
+    d.profiler.tick();
   }
   return NULL;
 }
