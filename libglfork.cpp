@@ -158,6 +158,39 @@ static __thread struct TSPrimusInfo {
     int width, height;
     bool first;
 
+    struct {
+      enum State {App, Wait, Swap, Map, NStates} state;
+      double state_time[NStates];
+      double prev_timestamp, old_timestamp;
+      int nframes, ndropped;
+
+      void tick(bool state_app = false)
+      {
+	struct timespec tp;
+	clock_gettime(CLOCK_MONOTONIC, &tp);
+	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+	if (!prev_timestamp)
+	  prev_timestamp = old_timestamp = timestamp;
+	if (state_app && state != App)
+	{
+	  state = App;
+	  ndropped++;
+	}
+	state_time[state] += timestamp - prev_timestamp;
+	state = (State)((state + 1) % NStates);
+	prev_timestamp = timestamp;
+	nframes += !!(state == Map);
+	double T = timestamp - old_timestamp;
+	if (state != Map || T < 5)
+	  return;
+	primus_trace("primus: profiling: render: %.1f fps, %.1f%% app, %.1f%% wait, %.1f%% swap, %.1f%% map\n", nframes / T,
+	             100 * state_time[App] / T, 100 * state_time[Wait] / T, 100 * state_time[Swap] / T, 100 * state_time[Map] / T);
+	old_timestamp = timestamp;
+	nframes = ndropped = 0;
+	memset(state_time, 0, sizeof(state_time));
+      }
+    } profiler;
+
     void update(const DrawableInfo& di)
     {
       if (width == di.width && height == di.height)
@@ -385,6 +418,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   const DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
+  bufs.profiler.tick(true);
   bufs.update(di);
   int orig_read_buf;
   if (!bufs.first)
@@ -394,6 +428,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
     else if (pthread_mutex_trylock(&tsprimus.d.amutex))
       return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   }
+  bufs.profiler.tick();
   primus.afns.glGetIntegerv(GL_READ_BUFFER, &orig_read_buf);
   primus.afns.glReadBuffer(GL_BACK);
   primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, bufs.pbos[bufs.cbuf]);
@@ -401,6 +436,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   primus.afns.glReadPixels(0, 0, di.width, di.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
   primus.afns.glReadBuffer(orig_read_buf);
   primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
+  bufs.profiler.tick();
   if (!bufs.first)
   {
     primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, bufs.pbos[bufs.cbuf ^ 1]);
@@ -423,6 +459,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   }
   bufs.first = false;
   bufs.cbuf ^= 1;
+  bufs.profiler.tick();
 }
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
