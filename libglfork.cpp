@@ -55,8 +55,8 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
 
 static struct PrimusInfo {
   Display *adpy;
-  CapturedFns afns;
   const void *needed_global;
+  CapturedFns afns;
   CapturedFns dfns;
   DrawablesInfo drawables;
   // FIXME: there are race conditions in accesses to these
@@ -65,8 +65,8 @@ static struct PrimusInfo {
 
   PrimusInfo():
     adpy(XOpenDisplay(getenv("PRIMUS_DISPLAY"))),
-    afns(getenv("PRIMUS_libGLa")),
     needed_global(dlopen(getenv("PRIMUS_LOAD_GLOBAL"), RTLD_LAZY | RTLD_GLOBAL)),
+    afns(getenv("PRIMUS_libGLa")),
     dfns(getenv("PRIMUS_libGLd"))
   {
     if (afns.handle == dfns.handle && strcmp(getenv("PRIMUS_libGLa"), getenv("PRIMUS_libGLd")))
