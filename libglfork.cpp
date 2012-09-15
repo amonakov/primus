@@ -352,12 +352,12 @@ void glXDestroyContext(Display *dpy, GLXContext ctx)
   primus.afns.glXDestroyContext(primus.adpy, ctx);
 }
 
-static void note_geometry(Display *dpy, Drawable draw, DrawableInfo &di)
+static void note_geometry(Display *dpy, Drawable draw, int *width, int *height)
 {
   Window root;
   int x, y;
   unsigned bw, d;
-  XGetGeometry(dpy, draw, &root, &x, &y, (unsigned *)&di.width, (unsigned *)&di.height, &bw, &d);
+  XGetGeometry(dpy, draw, &root, &x, &y, (unsigned *)width, (unsigned *)height, &bw, &d);
 }
 
 static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
@@ -374,7 +374,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
     assert(acfg);
     di.kind = di.XWindow;
     di.fbconfig = acfg;
-    note_geometry(dpy, draw, di);
+    note_geometry(dpy, draw, &di.width, &di.height);
   }
   GLXPbuffer &pbuffer = di.pbuffer;
   // FIXME the drawable could have been resized
@@ -468,7 +468,7 @@ GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const in
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
   di.fbconfig = config;
-  note_geometry(dpy, win, di);
+  note_geometry(dpy, win, &di.width, &di.height);
   return glxwin;
 }
 
@@ -505,7 +505,7 @@ GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   di.fbconfig = config;
-  note_geometry(dpy, pixmap, di);
+  note_geometry(dpy, pixmap, &di.width, &di.height);
   return glxpix;
 }
 
@@ -524,7 +524,7 @@ GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
   GLXPixmap glxpix = primus.dfns.glXCreateGLXPixmap(dpy, visual, pixmap);
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
-  note_geometry(dpy, pixmap, di);
+  note_geometry(dpy, pixmap, &di.width, &di.height);
   GLXFBConfig *acfgs, *dcfgs;
   match_fbconfigs(dpy, visual, &acfgs, &dcfgs);
   di.fbconfig = *acfgs;
