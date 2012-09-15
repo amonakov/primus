@@ -57,12 +57,12 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
 struct EarlyInitializer {
   EarlyInitializer()
   {
-#ifndef PRIMUS_NO_BUMBLEBEE
+#ifdef BUMBLEBEE_SOCKET
     errno = 0;
     int sock = socket(PF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, "/var/run/bumblebee.socket");
+    strcpy(addr.sun_path, BUMBLEBEE_SOCKET);
     connect(sock, (struct sockaddr *)&addr, sizeof(addr));
     if (errno)
       perror("connect");
@@ -70,9 +70,13 @@ struct EarlyInitializer {
     send(sock, &c, 1, 0);
     recv(sock, &c, 1, 0);
     assert(c == 'Y' && "bumblebeed failed");
+#else
+#warning Building without Bumblebee daemon support
 #endif
   }
 };
+
+#define getconf(V) (getenv(#V) ? getenv(#V) : V)
 
 static struct PrimusInfo {
   EarlyInitializer ei;
@@ -86,10 +90,10 @@ static struct PrimusInfo {
   std::map<GLXContext, GLXContext> actx2dctx;
 
   PrimusInfo():
-    adpy(XOpenDisplay(getenv("PRIMUS_DISPLAY"))),
-    needed_global(dlopen(getenv("PRIMUS_LOAD_GLOBAL"), RTLD_LAZY | RTLD_GLOBAL)),
-    afns(getenv("PRIMUS_libGLa")),
-    dfns(getenv("PRIMUS_libGLd"))
+    adpy(XOpenDisplay(getconf(PRIMUS_DISPLAY))),
+    needed_global(dlopen(getconf(PRIMUS_LOAD_GLOBAL), RTLD_LAZY | RTLD_GLOBAL)),
+    afns(getconf(PRIMUS_libGLa)),
+    dfns(getconf(PRIMUS_libGLd))
   {
     assert(adpy && "failed to open secondary X display");
     if (afns.handle == dfns.handle && strcmp(getenv("PRIMUS_libGLa"), getenv("PRIMUS_libGLd")))
