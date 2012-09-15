@@ -129,21 +129,23 @@ static __thread struct TSPrimusInfo {
       pthread_create(&thread, NULL, tsprimus_work, (void*)this);
     }
 
-    void set_drawable(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext ctx)
+    void set_drawable(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
     {
       if (primus.drawables[draw].kind == DrawableInfo::Pbuffer)
 	return;
       if (!thread)
 	init();
-      pthread_mutex_lock(&amutex);
+      // FIXME: this causes a deadlock with Bastion
+      // Ideally we should never wait for the display thread
+      //pthread_mutex_lock(&amutex);
       this->dpy = dpy;
       this->drawable = draw;
       this->read_drawable = read;
-      this->context = ctx;
+      this->context = actx ? primus.actx2dctx[actx] : NULL;
       this->width  = primus.drawables[draw].width;
       this->height = primus.drawables[draw].height;
       this->reinit = true;
-      pthread_mutex_unlock(&amutex);
+      //pthread_mutex_unlock(&amutex);
     }
     void wait()
     {
@@ -230,6 +232,7 @@ void* TSPrimusInfo::tsprimus_work(void *vd)
     {
       d.reinit = false;
       primus.dfns.glXMakeCurrent(d.dpy, d.drawable, d.context);
+      primus.dfns.glViewport(0, 0, d.width, d.height);
       float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
       float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
       primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
@@ -389,9 +392,8 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
 Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
 {
   primus_trace("%s\n", __func__);
-  GLXContext dctx = ctx ? primus.actx2dctx[ctx] : NULL;
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
-  tsprimus.d.set_drawable(dpy, drawable, drawable, dctx);
+  tsprimus.d.set_drawable(dpy, drawable, drawable, ctx);
   tsprimus.bufs.drop();
   return primus.afns.glXMakeCurrent(primus.adpy, pbuffer, ctx);
 }
@@ -401,12 +403,27 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
   primus_trace("%s\n", __func__);
   if (draw == read)
     return glXMakeCurrent(dpy, draw, ctx);
-  GLXContext dctx = ctx ? primus.actx2dctx[ctx] : NULL;
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
-  tsprimus.d.set_drawable(dpy, draw, read, dctx);
+  tsprimus.d.set_drawable(dpy, draw, read, ctx);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
   tsprimus.bufs.drop();
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
+}
+
+void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di)
+{
+  int w, h;
+  note_geometry(dpy, drawable, &w, &h);
+  if (w == di.width && h == di.height)
+    return;
+  primus_trace("primus: recreating backing pbuffer for a resized drawable\n");
+  di.width = w; di.height = h;
+  primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
+  int pbattrs[] = {GLX_PBUFFER_WIDTH, di.width, GLX_PBUFFER_HEIGHT, di.height, GLX_PRESERVED_CONTENTS, True, None};
+  di.pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, di.fbconfig, pbattrs);
+  GLXContext actx = glXGetCurrentContext();
+  primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, actx);
+  tsprimus.d.set_drawable(dpy, drawable, drawable, actx);
 }
 
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
@@ -414,7 +431,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   static bool dropframes = getenv("PRIMUS_DROPFRAMES");
   TSPrimusInfo::A& bufs = tsprimus.bufs;
   assert(primus.drawables.known(drawable));
-  const DrawableInfo &di = primus.drawables[drawable];
+  DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   bufs.profiler.tick(true);
@@ -458,6 +475,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   }
   bufs.first = false;
   bufs.cbuf ^= 1;
+  update_geometry(dpy, drawable, di);
   bufs.profiler.tick();
 }
 
