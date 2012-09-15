@@ -1,6 +1,9 @@
 #include <dlfcn.h>
 #include <pthread.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <errno.h>
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -51,7 +54,26 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
   }
 };
 
+struct EarlyInitializer {
+  EarlyInitializer()
+  {
+#ifndef PRIMUS_NO_BUMBLEBEE
+    int sock = socket(PF_UNIX, SOCK_STREAM, 0);
+    struct sockaddr_un addr;
+    addr.sun_family = AF_UNIX;
+    strcpy(addr.sun_path, "/var/run/bumblebee.socket");
+    connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+    assert(!errno && "connect() failed");
+    char c = 'C';
+    send(sock, &c, 1, 0);
+    recv(sock, &c, 1, 0);
+    assert(c == 'Y' && "bumblebeed failed");
+#endif
+  }
+};
+
 static struct PrimusInfo {
+  EarlyInitializer ei;
   Display *adpy;
   const void *needed_global;
   CapturedFns afns;
