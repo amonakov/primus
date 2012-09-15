@@ -561,7 +561,7 @@ void glXUseXFont(Font font, int first, int count, int list)
 
 GLXContext glXGetCurrentContext(void)
 {
-  return tsprimus.d.context;
+  return primus.afns.glXGetCurrentContext();
 }
 
 GLXDrawable glXGetCurrentDrawable(void)
