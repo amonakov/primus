@@ -16,7 +16,6 @@ struct CapturedFns {
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
 #include "glxext-reimpl.def"
-#include "glxext-dpyredir.def"
 #include "gl-passthru.def"
 #include "gl-needed.def"
 #undef DEF_GLX_PROTO
@@ -32,7 +31,6 @@ struct CapturedFns {
 #undef DEF_GLX_PROTO
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)this->glXGetProcAddress((GLubyte*)#name);
 #include "glxext-reimpl.def"
-#include "glxext-dpyredir.def"
 #include "gl-passthru.def"
 #include "gl-needed.def"
 #undef DEF_GLX_PROTO
@@ -608,13 +606,6 @@ ret name par \
 #include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
 
-#define DEF_GLX_PROTO(ret, name, par, dpy, ...) \
-extern "C" ret name par \
-{ primus_trace("primus: blindly redirecting dpy for %s\n", #name); \
-  return primus.afns.name(primus.adpy, __VA_ARGS__); }
-#include "glxext-dpyredir.def"
-#undef DEF_GLX_PROTO
-
 #define DEF_GLX_PROTO(ret, name, par, ...) \
 ret name par \
 { return primus.afns.name(__VA_ARGS__); }
@@ -635,7 +626,6 @@ __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 #include "glx-reimpl.def"
 #include "glxext-reimpl.def"
 #include "glx-dpyredir.def"
-#include "glxext-dpyredir.def"
 #undef  DEF_GLX_PROTO
   };
   static const __GLXextFuncPtr redefined_fns[] = {
@@ -643,7 +633,6 @@ __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 #include "glx-reimpl.def"
 #include "glxext-reimpl.def"
 #include "glx-dpyredir.def"
-#include "glxext-dpyredir.def"
 #undef  DEF_GLX_PROTO
   };
   __GLXextFuncPtr retval = NULL;
