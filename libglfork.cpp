@@ -58,12 +58,14 @@ struct EarlyInitializer {
   EarlyInitializer()
   {
 #ifndef PRIMUS_NO_BUMBLEBEE
+    errno = 0;
     int sock = socket(PF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, "/var/run/bumblebee.socket");
     connect(sock, (struct sockaddr *)&addr, sizeof(addr));
-    assert(!errno && "connect() failed");
+    if (errno)
+      perror("connect");
     char c = 'C';
     send(sock, &c, 1, 0);
     recv(sock, &c, 1, 0);
