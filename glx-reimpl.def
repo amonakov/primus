@@ -8,6 +8,9 @@ DEF_GLX_PROTO(void,       glXSwapBuffers,       (Display *dpy, GLXDrawable drawa
 DEF_GLX_PROTO(__GLXextFuncPtr, glXGetProcAddressARB, (const GLubyte *))
 DEF_GLX_PROTO(__GLXextFuncPtr, glXGetProcAddress,    (const GLubyte *))
 
+DEF_GLX_PROTO(const char*,  glXGetClientString,       (Display *dpy, int name),name)
+DEF_GLX_PROTO(const char*,  glXQueryExtensionsString, (Display *dpy, int screen),screen)
+
 DEF_GLX_PROTO(GLXWindow,    glXCreateWindow,          (Display *dpy, GLXFBConfig config, Window win, const int *attribList),config,win,attribList)
 DEF_GLX_PROTO(void,         glXDestroyWindow,         (Display *dpy, GLXWindow window),window)
 DEF_GLX_PROTO(GLXPbuffer,   glXCreatePbuffer,         (Display *dpy, GLXFBConfig config, const int *attribList),config,attribList)

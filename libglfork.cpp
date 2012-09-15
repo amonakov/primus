@@ -635,24 +635,32 @@ __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 #include "glx-dpyredir.def"
 #undef  DEF_GLX_PROTO
   };
-  __GLXextFuncPtr retval = NULL;
-  primus_trace("glXGetProcAddress(\"%s\"): ", procName);
   enum {n_redefined = sizeof(redefined_fns) / sizeof(redefined_fns[0])};
+  if (memcmp(procName, "glX", 3))
+    return primus.afns.glXGetProcAddress(procName);
   for (int i = 0; i < n_redefined; i++)
     if (!strcmp((const char *)procName, redefined_names[i]))
-    {
-      retval = redefined_fns[i];
-      primus_trace("local %p\n", retval);
-    }
-  if (!retval)
-  {
-    retval = primus.afns.glXGetProcAddress(procName);
-    primus_trace("native %p\n", retval);
-  }
-  return retval;
+      return redefined_fns[i];
+  return NULL;
 }
 
 __GLXextFuncPtr glXGetProcAddressARB(const GLubyte *procName)
 {
   return glXGetProcAddress(procName);
+}
+
+const char *glXGetClientString(Display *dpy, int name)
+{
+  switch (name)
+  {
+    case GLX_VENDOR: return "primus";
+    case GLX_VERSION: return "1.4";
+    case GLX_EXTENSIONS: return "";
+    default: return NULL;
+  }
+}
+
+const char *glXQueryExtensionsString(Display *dpy, int screen)
+{
+  return "";
 }
