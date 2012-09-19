@@ -183,7 +183,6 @@ static __thread struct TSPrimusInfo {
     GLXContext context;
     D *pd;
     bool reinit;
-    GLuint pbos[2];
     GLsync sync;
 
     struct {
@@ -284,6 +283,7 @@ void* TSPrimusInfo::dwork(void *vd)
 
 void* TSPrimusInfo::rwork(void *vr)
 {
+  GLuint pbos[2];
   int cbuf = 0;
   struct R &r = *(R *)vr;
   r.profiler.init();
@@ -294,22 +294,22 @@ void* TSPrimusInfo::rwork(void *vr)
     if (r.reinit)
     {
       r.reinit = false;
-      if (r.pbos[0])
+      if (pbos[0])
       {
 	pthread_mutex_lock(&r.pd->rmutex);
 	pthread_mutex_unlock(&r.pd->rmutex);
-	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, r.pbos[cbuf ^ 1]);
+	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
-	primus.afns.glDeleteBuffers(2, &r.pbos[0]);
+	primus.afns.glDeleteBuffers(2, &pbos[0]);
       }
       r.pd->reinit = true;
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
-      if (!r.pbos[0])
-	primus.afns.glGenBuffers(2, &r.pbos[0]);
+      if (!pbos[0])
+	primus.afns.glGenBuffers(2, &pbos[0]);
       primus.afns.glReadBuffer(GL_BACK);
-      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, r.pbos[1]);
+      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[1]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
-      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, r.pbos[0]);
+      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[0]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
     }
     primus.afns.glWaitSync(r.sync, 0, GL_TIMEOUT_IGNORED);
@@ -332,7 +332,7 @@ void* TSPrimusInfo::rwork(void *vr)
       r.pd->buf = pixeldata;
       pthread_mutex_unlock(&r.pd->dmutex);
       cbuf ^= 1;
-      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, r.pbos[cbuf]);
+      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
     }
     primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
     r.profiler.tick();
