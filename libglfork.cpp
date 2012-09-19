@@ -11,7 +11,7 @@
 #include <map>
 #include <GL/glx.h>
 
-#define primus_trace(...) do { if (1) fprintf(stderr, __VA_ARGS__); } while(0)
+#define primus_trace(...) do { if (1) fprintf(stderr, "primus: " __VA_ARGS__); } while(0)
 
 struct CapturedFns {
   void *handle;
@@ -26,7 +26,7 @@ struct CapturedFns {
   {
     assert(lib && lib[0] == '/');
     handle = dlopen(lib, RTLD_LAZY);
-    primus_trace("loading %s: %p\n", lib, handle);
+    primus_trace("loading %s\n", lib);
     assert(handle);
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)dlsym(handle, #name);
 #include "glx-reimpl.def"
@@ -98,7 +98,7 @@ static struct PrimusInfo {
   {
     assert(adpy && "failed to open secondary X display");
     if (afns.handle == dfns.handle && strcmp(getenv("PRIMUS_libGLa"), getenv("PRIMUS_libGLd")))
-      primus_trace("primus: warning: unexpectedly got same libGL for rendering and display\n");
+      primus_trace("warning: unexpectedly got same libGL for rendering and display\n");
     XInitThreads();
   }
 } primus;
@@ -142,7 +142,7 @@ static __thread struct TSPrimusInfo {
 	double period = timestamp - old_timestamp;
 	if (state != Wait || period < 5)
 	  return;
-	primus_trace("primus: profiling: display: %.1f fps, %.1f%% wait, %.1f%% upload, %.1f%% draw+swap\n", nframes / period,
+	primus_trace("profiling: display: %.1f fps, %.1f%% wait, %.1f%% upload, %.1f%% draw+swap\n", nframes / period,
 	             100 * state_time[Wait] / period, 100 * state_time[Upload] / period, 100 * state_time[DrawSwap] / period);
 	old_timestamp = timestamp;
 	nframes = 0;
@@ -211,7 +211,7 @@ static __thread struct TSPrimusInfo {
 	double T = timestamp - old_timestamp;
 	if (state != App || T < 5)
 	  return;
-	primus_trace("primus: profiling: readback: %.1f fps, %.1f%% app, %.1f%% map, %.1f%% wait\n", (nframes + ndropped) / T,
+	primus_trace("profiling: readback: %.1f fps, %.1f%% app, %.1f%% map, %.1f%% wait\n", (nframes + ndropped) / T,
 	             100 * state_time[App] / T, 100 * state_time[Map] / T, 100 * state_time[Wait] / T);
 	old_timestamp = timestamp;
 	nframes = ndropped = 0;
@@ -324,7 +324,7 @@ void* TSPrimusInfo::rwork(void *vr)
     tp.tv_nsec %= 1000000000;
     if (pthread_mutex_timedlock(&r.pd->rmutex, &tp))
     {
-      primus_trace("primus: warning: dropping a frame to avoid deadlock\n");
+      primus_trace("warning: dropping a frame to avoid deadlock\n");
       r.profiler.ndropped++;
     }
     else
@@ -389,7 +389,6 @@ static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs,
 
 GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList, Bool direct)
 {
-  primus_trace("%s\n", __func__);
   GLXFBConfig *acfgs, *dcfgs;
   match_fbconfigs(dpy, vis, &acfgs, &dcfgs);
   GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, *dcfgs, GLX_RGBA_TYPE, NULL, direct);
@@ -399,7 +398,7 @@ GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList
   primus.actx2rctx[actx] = rctx;
   primus.actx2fbconfig[actx] = *acfgs;;
   if (direct && !primus.dfns.glXIsDirect(dpy, dctx))
-    primus_trace("primus: warning: failed to acquire direct rendering context for display thread\n");
+    primus_trace("warning: failed to acquire direct rendering context for display thread\n");
   return actx;
 }
 
@@ -421,7 +420,6 @@ static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg)
 
 GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType, GLXContext shareList, Bool direct)
 {
-  primus_trace("%s\n", __func__);
   GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, get_dpy_fbc(dpy, config), renderType, NULL, direct);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, shareList, direct);
   GLXContext rctx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, actx, direct);
@@ -429,7 +427,7 @@ GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType,
   primus.actx2rctx[actx] = rctx;
   primus.actx2fbconfig[actx] = config;
   if (direct && !primus.dfns.glXIsDirect(dpy, dctx))
-    primus_trace("primus: warning: failed to acquire direct rendering context for display thread\n");
+    primus_trace("warning: failed to acquire direct rendering context for display thread\n");
   return actx;
 }
 
@@ -480,7 +478,6 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
 
 Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
 {
-  primus_trace("%s\n", __func__);
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
   tsprimus.d.set_drawable(dpy, drawable, drawable, ctx);
   tsprimus.r.set_drawable(drawable, ctx, &tsprimus.d);
@@ -489,7 +486,6 @@ Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
 
 Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext ctx)
 {
-  primus_trace("%s\n", __func__);
   if (draw == read)
     return glXMakeCurrent(dpy, draw, ctx);
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
@@ -505,7 +501,7 @@ static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di
   note_geometry(dpy, drawable, &w, &h);
   if (w == di.width && h == di.height)
     return;
-  primus_trace("primus: recreating backing pbuffer for a resized drawable\n");
+  primus_trace("recreating backing pbuffer for a resized drawable\n");
   di.width = w; di.height = h;
   primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
   int pbattrs[] = {GLX_PBUFFER_WIDTH, di.width, GLX_PBUFFER_HEIGHT, di.height, GLX_PRESERVED_CONTENTS, True, None};
@@ -533,7 +529,6 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
-  primus_trace("%s\n", __func__);
   GLXWindow glxwin = primus.dfns.glXCreateWindow(dpy, get_dpy_fbc(dpy, config), win, attribList);
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
@@ -552,7 +547,6 @@ void glXDestroyWindow(Display *dpy, GLXWindow window)
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
 {
-  primus_trace("%s\n", __func__);
   GLXPbuffer pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, config, attribList);
   DrawableInfo &di = primus.drawables[pbuffer];
   di.kind = di.Pbuffer;
@@ -569,7 +563,6 @@ void glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf)
 
 GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList)
 {
-  primus_trace("%s\n", __func__);
   GLXPixmap glxpix = primus.dfns.glXCreatePixmap(dpy, get_dpy_fbc(dpy, config), pixmap, attribList);
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
@@ -588,7 +581,6 @@ void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
 
 GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
 {
-  primus_trace("%s\n", __func__);
   GLXPixmap glxpix = primus.dfns.glXCreateGLXPixmap(dpy, visual, pixmap);
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
@@ -606,20 +598,18 @@ void glXDestroyGLXPixmap(Display *dpy, GLXPixmap pixmap)
 
 XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
 {
-  primus_trace("%s\n", __func__);
   return primus.dfns.glXGetVisualFromFBConfig(dpy, get_dpy_fbc(dpy, config));
 }
 
 void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned int *value)
 {
-  primus_trace("%s\n", __func__);
   assert(primus.drawables.known(draw));
   primus.afns.glXQueryDrawable(primus.adpy, primus.drawables[draw].pbuffer, attribute, value);
 }
 
 void glXUseXFont(Font font, int first, int count, int list)
 {
-  primus_trace("primus: sorry, not implemented: %s\n", __func__);
+  primus_trace("sorry, not implemented: %s\n", __func__);
   for (int i = 0; i < count; i++)
   {
     primus.afns.glNewList(list + i, GL_COMPILE);
@@ -669,8 +659,7 @@ int glXGetConfig(Display *dpy, XVisualInfo *visual, int attrib, int *value)
 
 #define DEF_GLX_PROTO(ret, name, par, ...) \
 ret name par \
-{ primus_trace("primus: blindly redirecting dpy for %s\n", #name); \
-  return primus.afns.name(primus.adpy, __VA_ARGS__); }
+{ return primus.afns.name(primus.adpy, __VA_ARGS__); }
 #include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
 
