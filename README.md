@@ -13,9 +13,6 @@ Both original and shadow GL contexts can use direct rendering.
 
 A simple shell script, `primusrun`, is provided to help with testing.
 
-Some applications, e.g. Bastion, need PRIMUS_DROPFRAMES=1 in environment
-to avoid a deadlock.
-
 At the moment primus does not advertise any GLX extensions to the client.
 
 On benchmarking
@@ -23,7 +20,7 @@ On benchmarking
 
 Please note that VirtualGL does not really display all frames it
 gets from the offload slave.  By default, primus does render all frames
-it gets from the secondary server, but that can be overridden with
-`PRIMUS_DROPFRAMES` (see primusrun).
+it gets from the secondary server, except when the display thread
+locks up for longer than 20 milliseconds.
 
 For an interesting comparison, play around with `ipers` from mesa-demos.
