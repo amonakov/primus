@@ -81,6 +81,7 @@ struct EarlyInitializer {
 static struct PrimusInfo {
   EarlyInitializer ei;
   Display *adpy;
+  Display *ddpy;
   const void *needed_global;
   CapturedFns afns;
   CapturedFns dfns;
@@ -92,6 +93,7 @@ static struct PrimusInfo {
 
   PrimusInfo():
     adpy(XOpenDisplay(getconf(PRIMUS_DISPLAY))),
+    ddpy(XOpenDisplay(NULL)),
     needed_global(dlopen(getconf(PRIMUS_LOAD_GLOBAL), RTLD_LAZY | RTLD_GLOBAL)),
     afns(getconf(PRIMUS_libGLa)),
     dfns(getconf(PRIMUS_libGLd))
@@ -99,7 +101,6 @@ static struct PrimusInfo {
     assert(adpy && "failed to open secondary X display");
     if (afns.handle == dfns.handle && strcmp(getenv("PRIMUS_libGLa"), getenv("PRIMUS_libGLd")))
       primus_trace("warning: unexpectedly got same libGL for rendering and display\n");
-    XInitThreads();
   }
 } primus;
 
@@ -256,7 +257,7 @@ void* TSPrimusInfo::dwork(void *vd)
     {
       d.reinit = false;
       width = d.width; height = d.height;
-      primus.dfns.glXMakeCurrent(d.dpy, d.drawable, d.context);
+      primus.dfns.glXMakeCurrent(primus.ddpy, d.drawable, d.context);
       primus.dfns.glViewport(0, 0, d.width, d.height);
       float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
       float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
@@ -275,7 +276,7 @@ void* TSPrimusInfo::dwork(void *vd)
     d.profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     pthread_mutex_unlock(&d.rmutex);
-    primus.dfns.glXSwapBuffers(d.dpy, d.drawable);
+    primus.dfns.glXSwapBuffers(primus.ddpy, d.drawable);
     d.profiler.tick();
   }
   return NULL;
@@ -391,7 +392,7 @@ GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList
 {
   GLXFBConfig *acfgs, *dcfgs;
   match_fbconfigs(dpy, vis, &acfgs, &dcfgs);
-  GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, *dcfgs, GLX_RGBA_TYPE, NULL, direct);
+  GLXContext dctx = primus.dfns.glXCreateNewContext(primus.ddpy, *dcfgs, GLX_RGBA_TYPE, NULL, direct);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, shareList, direct);
   GLXContext rctx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, actx, direct);
   primus.actx2dctx[actx] = dctx;
@@ -420,7 +421,7 @@ static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg)
 
 GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType, GLXContext shareList, Bool direct)
 {
-  GLXContext dctx = primus.dfns.glXCreateNewContext(dpy, get_dpy_fbc(dpy, config), renderType, NULL, direct);
+  GLXContext dctx = primus.dfns.glXCreateNewContext(primus.ddpy, get_dpy_fbc(dpy, config), renderType, NULL, direct);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, shareList, direct);
   GLXContext rctx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, actx, direct);
   primus.actx2dctx[actx] = dctx;
@@ -438,7 +439,7 @@ void glXDestroyContext(Display *dpy, GLXContext ctx)
   primus.actx2dctx.erase(ctx);
   primus.actx2rctx.erase(ctx);
   primus.actx2fbconfig.erase(ctx);
-  primus.dfns.glXDestroyContext(dpy, dctx);
+  primus.dfns.glXDestroyContext(primus.ddpy, dctx);
   primus.afns.glXDestroyContext(primus.adpy, rctx);
   primus.afns.glXDestroyContext(primus.adpy, ctx);
 }
