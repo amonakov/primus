@@ -305,7 +305,6 @@ void* TSPrimusInfo::rwork(void *vr)
 	pthread_mutex_unlock(&r.pd->rmutex);
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
-	primus.afns.glDeleteBuffers(2, &pbos[0]);
       }
       r.pd->reinit = true;
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
