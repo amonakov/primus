@@ -135,11 +135,13 @@ static __thread struct TSPrimusInfo {
 	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
 	prev_timestamp = old_timestamp = timestamp;
       }
-      void tick()
+      void tick(bool state_reset = false)
       {
 	struct timespec tp;
 	clock_gettime(CLOCK_MONOTONIC, &tp);
 	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+	if (state_reset)
+	  state = Wait;
 	state_time[state] += timestamp - prev_timestamp;
 	state = (State)((state + 1) % NStates);
 	prev_timestamp = timestamp;
@@ -163,9 +165,9 @@ static __thread struct TSPrimusInfo {
       pthread_create(&worker, NULL, dwork, (void*)this);
     }
 
-    void set_drawable(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
+    void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
     {
-      if (primus.drawables[draw].kind == DrawableInfo::Pbuffer)
+      if (draw && primus.drawables[draw].kind == DrawableInfo::Pbuffer)
 	return;
       if (!worker)
 	spawn_worker();
@@ -173,8 +175,8 @@ static __thread struct TSPrimusInfo {
       this->drawable = draw;
       this->read_drawable = read;
       this->context = actx ? primus.actx2dctx[actx] : NULL;
-      this->width  = primus.drawables[draw].width;
-      this->height = primus.drawables[draw].height;
+      this->width  = draw ? primus.drawables[draw].width  : 0;
+      this->height = draw ? primus.drawables[draw].height : 0;
     }
   } d;
 
@@ -203,11 +205,13 @@ static __thread struct TSPrimusInfo {
 	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
 	prev_timestamp = old_timestamp = timestamp;
       }
-      void tick()
+      void tick(bool state_reset = false)
       {
 	struct timespec tp;
 	clock_gettime(CLOCK_MONOTONIC, &tp);
 	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+	if (state_reset)
+	  state = App;
 	state_time[state] += timestamp - prev_timestamp;
 	state = (State)((state + 1) % NStates);
 	prev_timestamp = timestamp;
@@ -232,20 +236,34 @@ static __thread struct TSPrimusInfo {
       pthread_create(&worker, NULL, rwork, (void*)this);
     }
 
-    void set_drawable(GLXDrawable draw, GLXContext actx, D *pd)
+    void make_current(GLXDrawable draw, GLXContext actx, D *pd)
     {
-      if (primus.drawables[draw].kind == DrawableInfo::Pbuffer)
+      if (draw && primus.drawables[draw].kind == DrawableInfo::Pbuffer)
 	return;
       if (!worker)
 	spawn_worker();
-      this->pbuffer = primus.drawables[draw].pbuffer;
+      this->pbuffer = draw ? primus.drawables[draw].pbuffer : 0;
       this->context = actx ? primus.actx2rctx[actx] : NULL;
-      this->width  = primus.drawables[draw].width;
-      this->height = primus.drawables[draw].height;
-      this->pd     = pd;
-      this->reinit = true;
+      this->width   = draw ? primus.drawables[draw].width  : 0;
+      this->height  = draw ? primus.drawables[draw].height : 0;
+      this->pd      = pd;
+      this->reinit  = true;
     }
   } r;
+  void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
+  {
+    d.make_current(dpy, draw, read, actx);
+    r.make_current(draw, actx, &d);
+    pthread_mutex_unlock(&r.rmutex);
+    pthread_mutex_lock(&r.amutex);
+    if (!draw || !actx)
+    {
+      assert(!draw && !actx);
+      pthread_join(d.worker, NULL);
+      pthread_join(r.worker, NULL);
+      r.worker = d.worker = 0;
+    }
+  }
 } tsprimus;
 
 void* TSPrimusInfo::dwork(void *vd)
@@ -258,12 +276,17 @@ void* TSPrimusInfo::dwork(void *vd)
   for (;;)
   {
     pthread_mutex_lock(&d.dmutex);
-    d.profiler.tick();
+    d.profiler.tick(true);
     if (d.reinit)
     {
       d.reinit = false;
       width = d.width; height = d.height;
       primus.dfns.glXMakeCurrent(primus.ddpy, d.drawable, d.context);
+      if (!d.drawable)
+      {
+	pthread_mutex_unlock(&d.rmutex);
+	return NULL;
+      }
       primus.dfns.glViewport(0, 0, d.width, d.height);
       primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
       primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
@@ -275,6 +298,8 @@ void* TSPrimusInfo::dwork(void *vd)
       primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
       primus.dfns.glEnable(GL_TEXTURE_2D);
+      pthread_mutex_unlock(&d.rmutex);
+      continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
     d.profiler.tick();
@@ -295,7 +320,7 @@ void* TSPrimusInfo::rwork(void *vr)
   for (;;)
   {
     pthread_mutex_lock(&r.rmutex);
-    r.profiler.tick();
+    r.profiler.tick(true);
     if (r.reinit)
     {
       r.reinit = false;
@@ -307,7 +332,14 @@ void* TSPrimusInfo::rwork(void *vr)
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
       }
       r.pd->reinit = true;
+      pthread_mutex_unlock(&r.pd->dmutex);
+      pthread_mutex_lock(&r.pd->rmutex);
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
+      if (!r.pbuffer)
+      {
+	pthread_mutex_unlock(&r.amutex);
+	return NULL;
+      }
       if (!pbos[0])
 	primus.afns.glGenBuffers(2, &pbos[0]);
       primus.afns.glReadBuffer(GL_BACK);
@@ -315,6 +347,8 @@ void* TSPrimusInfo::rwork(void *vr)
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[0]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
+      pthread_mutex_unlock(&r.amutex);
+      continue;
     }
     primus.afns.glWaitSync(r.sync, 0, GL_TIMEOUT_IGNORED);
     primus.afns.glReadPixels(0, 0, r.width, r.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
@@ -442,7 +476,8 @@ void glXDestroyContext(Display *dpy, GLXContext ctx)
   primus.actx2dctx.erase(ctx);
   primus.actx2rctx.erase(ctx);
   primus.actx2fbconfig.erase(ctx);
-  primus.dfns.glXDestroyContext(primus.ddpy, dctx);
+  //FIXME: This causes a BadMatch in SMB
+  //primus.dfns.glXDestroyContext(primus.ddpy, dctx);
   primus.afns.glXDestroyContext(primus.adpy, rctx);
   primus.afns.glXDestroyContext(primus.adpy, ctx);
 }
@@ -483,8 +518,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
 Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
 {
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
-  tsprimus.d.set_drawable(dpy, drawable, drawable, ctx);
-  tsprimus.r.set_drawable(drawable, ctx, &tsprimus.d);
+  tsprimus.make_current(dpy, drawable, drawable, ctx);
   return primus.afns.glXMakeCurrent(primus.adpy, pbuffer, ctx);
 }
 
@@ -493,8 +527,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
   if (draw == read)
     return glXMakeCurrent(dpy, draw, ctx);
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
-  tsprimus.d.set_drawable(dpy, draw, read, ctx);
-  tsprimus.r.set_drawable(draw, ctx, &tsprimus.d);
+  tsprimus.make_current(dpy, draw, read, ctx);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
@@ -512,8 +545,7 @@ static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di
   di.pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, di.fbconfig, pbattrs);
   GLXContext actx = glXGetCurrentContext();
   primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, actx);
-  tsprimus.d.set_drawable(dpy, drawable, drawable, actx);
-  tsprimus.r.set_drawable(drawable, actx, &tsprimus.d);
+  tsprimus.make_current(dpy, drawable, drawable, actx);
 }
 
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
