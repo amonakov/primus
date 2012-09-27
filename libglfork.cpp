@@ -288,7 +288,7 @@ void* TSPrimusInfo::dwork(void *vd)
 
 void* TSPrimusInfo::rwork(void *vr)
 {
-  GLuint pbos[2];
+  GLuint pbos[2] = {0};
   int cbuf = 0;
   struct R &r = *(R *)vr;
   r.profiler.init();
