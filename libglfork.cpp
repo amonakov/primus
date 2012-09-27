@@ -38,6 +38,10 @@ struct CapturedFns {
 #include "gl-needed.def"
 #undef DEF_GLX_PROTO
   }
+  ~CapturedFns()
+  {
+    dlclose(handle);
+  }
 };
 
 struct DrawableInfo {
