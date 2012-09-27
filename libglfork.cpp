@@ -252,6 +252,8 @@ void* TSPrimusInfo::dwork(void *vd)
 {
   struct D &d = *(D *)vd;
   int width, height;
+  static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
+  static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
   d.profiler.init();
   for (;;)
   {
@@ -263,8 +265,6 @@ void* TSPrimusInfo::dwork(void *vd)
       width = d.width; height = d.height;
       primus.dfns.glXMakeCurrent(primus.ddpy, d.drawable, d.context);
       primus.dfns.glViewport(0, 0, d.width, d.height);
-      float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
-      float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
       primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
       primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
       primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
