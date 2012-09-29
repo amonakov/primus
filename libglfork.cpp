@@ -471,7 +471,7 @@ GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType,
 
 void glXDestroyContext(Display *dpy, GLXContext ctx)
 {
-  GLXContext dctx = primus.actx2dctx[ctx];
+  //GLXContext dctx = primus.actx2dctx[ctx];
   GLXContext rctx = primus.actx2rctx[ctx];
   primus.actx2dctx.erase(ctx);
   primus.actx2rctx.erase(ctx);
@@ -700,7 +700,7 @@ ret name par \
 #undef DEF_GLX_PROTO
 
 #define DEF_GLX_PROTO(ret, name, par, ...) \
-ret name par \
+extern "C" ret name par \
 { return primus.afns.name(__VA_ARGS__); }
 #include "gl-passthru.def"
 #undef DEF_GLX_PROTO
@@ -757,3 +757,7 @@ const char *glXQueryExtensionsString(Display *dpy, int screen)
 {
   return "";
 }
+
+#ifndef PRIMUS_STRICT
+#warning Enabled workarounds for applications demanding more than promised by the OpenGL ABI
+#endif
