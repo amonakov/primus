@@ -1,5 +1,6 @@
 CXX      ?= g++
 CXXFLAGS ?= -Wall -g
+LIBDIR   ?= lib
 
 BUMBLEBEE_SOCKET   := '"/var/run/bumblebee.socket"'
 PRIMUS_DISPLAY     := '":8"'
@@ -13,5 +14,6 @@ CXXFLAGS += -DPRIMUS_LOAD_GLOBAL=$(PRIMUS_LOAD_GLOBAL)
 CXXFLAGS += -DPRIMUS_libGLa=$(PRIMUS_libGLa)
 CXXFLAGS += -DPRIMUS_libGLd=$(PRIMUS_libGLd)
 
-libGL.so.1: libglfork.cpp
+$(LIBDIR)/libGL.so.1: libglfork.cpp
+	mkdir -p $(LIBDIR)
 	$(CXX) $(CXXFLAGS) -fPIC -shared -o $@ $< -lX11 -lpthread -lrt

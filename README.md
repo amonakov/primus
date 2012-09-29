@@ -15,6 +15,14 @@ A simple shell script, `primusrun`, is provided to help with testing.
 
 At the moment primus does not advertise any GLX extensions to the client.
 
+Building for multilib (32-bit + 64-bit) systems
+-----------------------------------------------
+
+    LIBDIR=lib make && CXX=g++\ -m32 LIBDIR=lib32 make
+
+Adjust `LIBDIR` variables above as appropriate for your distribution (some
+may need `lib64` and `lib`).
+
 On benchmarking
 ---------------
 
