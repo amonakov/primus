@@ -20,8 +20,12 @@ Building for multilib (32-bit + 64-bit) systems
 
     LIBDIR=lib make && CXX=g++\ -m32 LIBDIR=lib32 make
 
-Adjust `LIBDIR` variables above as appropriate for your distribution (some
-may need `lib64` and `lib`).
+Adjust `LIBDIR` variables above as appropriate for your distribution
+(reflecting how `/usr/lib*` are named):
+
+* Arch needs `lib` and `lib32` as above
+* Gentoo needs `lib64` and `lib32`
+* RPM-based may need `lib64` and `lib`
 
 On benchmarking
 ---------------
