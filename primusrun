@@ -18,7 +18,7 @@ PRIMUS_libGL=${PRIMUS_libGL:-$(dirname `readlink -ne $0`)/'$LIB'}
 # PRIMUS_libGL=${PRIMUS_libGL}:/usr/\$LIB/opengl/nvidia/lib
 
 # Mesa drivers need a few symbols to be visible
-# export PRIMUS_LOAD_GLOBAL=${PRIMUS_LOAD_GLOBAL:-'/usr/$LIB/libglapi.so'}
+# export PRIMUS_LOAD_GLOBAL=${PRIMUS_LOAD_GLOBAL:-'/usr/$LIB/libglapi.so.0'}
 
 # Need functions from primus libGL to take precedence
 export LD_LIBRARY_PATH=${PRIMUS_libGL}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}

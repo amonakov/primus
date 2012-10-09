@@ -7,7 +7,7 @@ LIBDIR   ?= lib
 
 BUMBLEBEE_SOCKET   := '"/var/run/bumblebee.socket"'
 PRIMUS_DISPLAY     := '":8"'
-PRIMUS_LOAD_GLOBAL := '"/usr/$$LIB/libglapi.so"'
+PRIMUS_LOAD_GLOBAL := '"/usr/$$LIB/libglapi.so.0"'
 PRIMUS_libGLa      := '"/usr/$$LIB/nvidia-bumblebee/libGL.so.1"'
 PRIMUS_libGLd      := '"/usr/$$LIB/libGL.so.1"'
 
