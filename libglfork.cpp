@@ -435,7 +435,7 @@ GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList
   primus.actx2dctx[actx] = dctx;
   primus.actx2rctx[actx] = rctx;
   primus.actx2fbconfig[actx] = *acfgs;;
-  if (direct && !primus.dfns.glXIsDirect(dpy, dctx))
+  if (direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx))
     primus_trace("warning: failed to acquire direct rendering context for display thread\n");
   return actx;
 }
@@ -464,7 +464,7 @@ GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType,
   primus.actx2dctx[actx] = dctx;
   primus.actx2rctx[actx] = rctx;
   primus.actx2fbconfig[actx] = config;
-  if (direct && !primus.dfns.glXIsDirect(dpy, dctx))
+  if (direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx))
     primus_trace("warning: failed to acquire direct rendering context for display thread\n");
   return actx;
 }
