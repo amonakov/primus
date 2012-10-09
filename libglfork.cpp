@@ -566,7 +566,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
-  GLXWindow glxwin = primus.dfns.glXCreateWindow(dpy, get_dpy_fbc(dpy, config), win, attribList);
+  GLXWindow glxwin = primus.dfns.glXCreateWindow(primus.ddpy, get_dpy_fbc(dpy, config), win, attribList);
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
   di.fbconfig = config;
@@ -576,7 +576,7 @@ GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const in
 
 void glXDestroyWindow(Display *dpy, GLXWindow window)
 {
-  primus.dfns.glXDestroyWindow(dpy, window);
+  primus.dfns.glXDestroyWindow(primus.ddpy, window);
   if (primus.drawables[window].pbuffer)
     primus.afns.glXDestroyPbuffer(primus.adpy, primus.drawables[window].pbuffer);
   primus.drawables.erase(window);
@@ -618,7 +618,7 @@ void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
 
 GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
 {
-  GLXPixmap glxpix = primus.dfns.glXCreateGLXPixmap(dpy, visual, pixmap);
+  GLXPixmap glxpix = primus.dfns.glXCreateGLXPixmap(primus.ddpy, visual, pixmap);
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   note_geometry(dpy, pixmap, &di.width, &di.height);
@@ -630,7 +630,7 @@ GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
 
 void glXDestroyGLXPixmap(Display *dpy, GLXPixmap pixmap)
 {
-  glXDestroyPixmap(dpy, pixmap);
+  glXDestroyPixmap(primus.ddpy, pixmap);
 }
 
 XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
