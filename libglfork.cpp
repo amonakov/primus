@@ -103,7 +103,7 @@ static struct PrimusInfo {
     dfns(getconf(PRIMUS_libGLd))
   {
     assert(adpy && "failed to open secondary X display");
-    if (afns.handle == dfns.handle && strcmp(getconf("PRIMUS_libGLa"), getconf("PRIMUS_libGLd")))
+    if (afns.handle == dfns.handle && strcmp(getconf(PRIMUS_libGLa), getconf(PRIMUS_libGLd)))
       primus_trace("warning: unexpectedly got same libGL for rendering and display\n");
   }
 } primus;
