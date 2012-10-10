@@ -197,7 +197,7 @@ static __thread struct TSPrimusInfo {
       enum State {App, Map, Wait, NStates} state;
       double state_time[NStates];
       double prev_timestamp, old_timestamp;
-      int nframes, ndropped;
+      int nframes;
 
       void init()
       {
@@ -220,10 +220,10 @@ static __thread struct TSPrimusInfo {
 	double T = timestamp - old_timestamp;
 	if (state != App || T < 5)
 	  return;
-	primus_trace("profiling: readback: %.1f fps, %.1f%% app, %.1f%% map, %.1f%% wait\n", (nframes + ndropped) / T,
+	primus_trace("profiling: readback: %.1f fps, %.1f%% app, %.1f%% map, %.1f%% wait\n", nframes / T,
 	             100 * state_time[App] / T, 100 * state_time[Map] / T, 100 * state_time[Wait] / T);
 	old_timestamp = timestamp;
-	nframes = ndropped = 0;
+	nframes = 0;
 	memset(state_time, 0, sizeof(state_time));
       }
     } profiler;
@@ -364,7 +364,6 @@ void* TSPrimusInfo::rwork(void *vr)
     if (pthread_mutex_timedlock(&r.pd->rmutex, &tp))
     {
       primus_trace("warning: dropping a frame to avoid deadlock\n");
-      r.profiler.ndropped++;
     }
     else
     {
