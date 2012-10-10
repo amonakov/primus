@@ -26,6 +26,7 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
 * Arch needs `lib` and `lib32` as above
 * Gentoo needs `lib64` and `lib32`
 * RPM-based may need `lib64` and `lib`
+* Debian (with multiarch) needs `lib/x86_64-linux-gnu` and `lib/i386-linux-gnu`
 
 On benchmarking
 ---------------
