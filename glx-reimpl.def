@@ -1,3 +1,4 @@
+// GLX Functions implemented by primus
 DEF_GLX_PROTO(GLXContext, glXCreateContext,     (Display *dpy, XVisualInfo *vis, GLXContext shareList, Bool direct))
 DEF_GLX_PROTO(GLXContext, glXCreateNewContext,  (Display *dpy, GLXFBConfig config, int renderType, GLXContext shareList, Bool direct))
 DEF_GLX_PROTO(void,       glXDestroyContext,    (Display *dpy, GLXContext ctx))

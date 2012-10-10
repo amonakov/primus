@@ -1,3 +1,42 @@
+// primus: quick'n'dirty OpenGL offloading
+//
+// The purpose is to redirect OpenGL rendering to another X display, and copy
+// the rendered frames to the original (as if rendering was not redirected),
+// similar to VirtualGL, but with different assumptions and design goals.
+//
+// primus makes the following assumptions:
+//
+// * both X servers are local, and direct rendering is available on both
+// * the application is "well-behaved" (uses double buffering, does not use
+//   color index rendering, does not draw on top of the OpenGL drawable, etc.)
+//
+// In contrast, VirtualGL:
+// * assumes that the primary X display is remote
+// * supports obscure OpenGL functionality, making it more versatile
+//
+// The design goals are:
+//
+// * simplicity/minimalism:
+//   - only GLX functions are overridden
+//   - only two Xlib functions are used
+// * efficiency:
+//   - minimal amount of framebuffer data copying (unfortunately OpenGL does
+//     not allow to reduce beyond 2 copies (readback+display))
+//   - pipelining of rendering, readback and display
+//
+// Put another way, VirtualGL is optimized for running arbitrary OpenGL
+// applications over a network, with correctness and bandwidth being primary
+// concerns, while primus is optimized for running modern games on hybrid
+// graphics hardware setups, with simplicity and performance in mind.
+//
+// Unlike VirtualGL, primus does not rely on LD_PRELOAD mechanism, but instead
+// implements a replacement OpenGL library.  This is generally a cleaner
+// approach, as it avoids the need to intercept dlopen+dlsym to support
+// applications loading libGL.so via dlopen (most SDL apps). The downside is
+// that OpenGL functions need to be explicitely forwarded, and some
+// applications expecting GL extensions functions to be exported may fail to
+// load.
+
 #include <dlfcn.h>
 #include <pthread.h>
 #include <time.h>
@@ -13,8 +52,10 @@
 
 #define primus_trace(...) do { if (1) fprintf(stderr, "primus: " __VA_ARGS__); } while(0)
 
+// Pointers to implemented/forwarded GLX and OpenGL functions
 struct CapturedFns {
   void *handle;
+  // Declare functions as fields of the struct
 #define DEF_GLX_PROTO(ret, name, args, ...) ret (*name) args;
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
@@ -44,7 +85,9 @@ struct CapturedFns {
   }
 };
 
+// Drawable tracking info
 struct DrawableInfo {
+  // Only XWindow is not explicitely created via GLX
   enum {XWindow, Window, Pixmap, Pbuffer} kind;
   GLXFBConfig fbconfig;
   GLXPbuffer  pbuffer;
@@ -58,10 +101,12 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
   }
 };
 
+// Runs before all other initialization takes place
 struct EarlyInitializer {
   EarlyInitializer()
   {
 #ifdef BUMBLEBEE_SOCKET
+    // Signal the Bumblebee daemon to bring up secondary X
     errno = 0;
     int sock = socket(PF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un addr;
@@ -80,12 +125,21 @@ struct EarlyInitializer {
   }
 };
 
+// Shorthand for obtaining compile-time configurable value that can be
+// overridden by environment
 #define getconf(V) (getenv(#V) ? getenv(#V) : V)
 
+// Process-wide data
 static struct PrimusInfo {
   EarlyInitializer ei;
+  // The "accelerating" X display
   Display *adpy;
+  // The "displaying" X display. The same as the application is using, but
+  // primus opens its own connection.
+  // FIXME: worker threads need to open their own connections as well?
   Display *ddpy;
+  // An artifact: primus needs to make symbols from libglapi.so globally
+  // visible before loading Mesa
   const void *needed_global;
   CapturedFns afns;
   CapturedFns dfns;
@@ -109,10 +163,14 @@ static struct PrimusInfo {
   }
 } primus;
 
+// Thread-specific data
+// For each thread that called glXMakeCurrent, primus spawns two additional
+// threads: the readback task, and the display task.
 static __thread struct TSPrimusInfo {
 
   static void* dwork(void *vd);
 
+  // Pertaining to the display task
   struct D {
     pthread_t worker;
     pthread_mutex_t dmutex, rmutex;
@@ -183,12 +241,14 @@ static __thread struct TSPrimusInfo {
 
   static void* rwork(void *vr);
 
+  // Pertaining to the readback task
   struct R {
     pthread_t worker;
     pthread_mutex_t amutex, rmutex;
     int width, height;
     GLXDrawable pbuffer;
     GLXContext context;
+    // Pointer to the corresponding display task descriptor
     D *pd;
     bool reinit;
     GLsync sync;
@@ -378,6 +438,7 @@ void* TSPrimusInfo::rwork(void *vr)
   return NULL;
 }
 
+// Find appropriate FBConfigs on both adpy and ddpy for a given Visual
 static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs, GLXFBConfig **dcfgs)
 {
   static int (*dglXGetConfig)(Display*, XVisualInfo*, int, int*)
@@ -440,6 +501,7 @@ GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList
   return actx;
 }
 
+// Find ddpy FBConfig to draw on.  No depth, stencil or such required.
 static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg)
 {
   int dcfgattrs[] = {
@@ -482,6 +544,7 @@ void glXDestroyContext(Display *dpy, GLXContext ctx)
   primus.afns.glXDestroyContext(primus.adpy, ctx);
 }
 
+// Find out the dimensions of the window
 static void note_geometry(Display *dpy, Drawable draw, int *width, int *height)
 {
   Window root;
@@ -490,6 +553,7 @@ static void note_geometry(Display *dpy, Drawable draw, int *width, int *height)
   XGetGeometry(dpy, draw, &root, &x, &y, (unsigned *)width, (unsigned *)height, &bw, &d);
 }
 
+// Create or recall backing Pbuffer for the drawable
 static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
 {
   if (!draw)
@@ -499,7 +563,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
   DrawableInfo &di = primus.drawables[draw];
   if (!known)
   {
-    // Drawable is a plain X Window
+    // Drawable is a plain X Window. Get the FBConfig from the context
     GLXFBConfig acfg = primus.actx2fbconfig[ctx];
     assert(acfg);
     di.kind = di.XWindow;
@@ -532,6 +596,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
 
+// Recreate the backing Pbuffer and reinitialize workers upon resize
 static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di)
 {
   int w, h;
@@ -556,6 +621,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   if (di.kind == di.XWindow)
     update_geometry(dpy, drawable, di);
+  // Readback thread needs a sync object to avoid reading an incomplete frame
   tsprimus.r.sync = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
   pthread_mutex_unlock(&tsprimus.r.rmutex);
   pthread_mutex_lock(&tsprimus.r.amutex);
@@ -665,12 +731,10 @@ GLXDrawable glXGetCurrentDrawable(void)
 
 void glXWaitGL(void)
 {
-  // FIXME: implement for single-buffered apps
 }
 
 void glXWaitX(void)
 {
-  // FIXME: implement for single-buffered apps
 }
 
 Display *glXGetCurrentDisplay(void)
@@ -683,6 +747,7 @@ GLXDrawable glXGetCurrentReadDrawable(void)
   return tsprimus.d.read_drawable;
 }
 
+// Application sees ddpy-side Visuals, but adpy-side FBConfigs and Contexts
 XVisualInfo* glXChooseVisual(Display *dpy, int screen, int *attribList)
 {
   return primus.dfns.glXChooseVisual(dpy, screen, attribList);
@@ -693,12 +758,14 @@ int glXGetConfig(Display *dpy, XVisualInfo *visual, int attrib, int *value)
   return primus.dfns.glXGetConfig(dpy, visual, attrib, value);
 }
 
+// GLX forwarders that reroute to adpy
 #define DEF_GLX_PROTO(ret, name, par, ...) \
 ret name par \
 { return primus.afns.name(primus.adpy, __VA_ARGS__); }
 #include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
 
+// OpenGL forwarders
 #define DEF_GLX_PROTO(ret, name, par, ...) \
 extern "C" ret name par \
 { return primus.afns.name(__VA_ARGS__); }
@@ -729,8 +796,10 @@ __GLXextFuncPtr glXGetProcAddress(const GLubyte *procName)
 #undef  DEF_GLX_PROTO
   };
   enum {n_redefined = sizeof(redefined_fns) / sizeof(redefined_fns[0])};
+  // Non-GLX functions are forwarded to the accelerating libGL
   if (memcmp(procName, "glX", 3))
     return primus.afns.glXGetProcAddress(procName);
+  // All GLX functions are either implemented in primus or not available
   for (int i = 0; i < n_redefined; i++)
     if (!strcmp((const char *)procName, redefined_names[i]))
       return redefined_fns[i];
@@ -758,6 +827,9 @@ const char *glXQueryExtensionsString(Display *dpy, int screen)
   return "";
 }
 
+// OpenGL ABI specifies that anything above OpenGL 1.2 + ARB_multitexture must
+// be obtained via glXGetProcAddress, but some applications link against
+// extension functions, and Mesa and vendor libraries let them
 #ifndef PRIMUS_STRICT
 #warning Enabled workarounds for applications demanding more than promised by the OpenGL ABI
 #endif

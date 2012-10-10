@@ -1,2 +1,2 @@
+// GLX extension functions implemented in primus
 DEF_GLX_PROTO(int,          glXSwapIntervalSGI,       (int interval))
-

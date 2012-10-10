@@ -1,3 +1,4 @@
+// Prototypes for auto-generating forwarders for OpenGL functions
 DEF_GLX_PROTO(void, glClearIndex,(GLfloat c), c)
 DEF_GLX_PROTO(void, glClearColor,(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha), red, green, blue, alpha)
 DEF_GLX_PROTO(void, glClear,(GLbitfield mask), mask)

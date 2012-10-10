@@ -1,3 +1,4 @@
+// GLX functions which need to be simply forwarded
 DEF_GLX_PROTO(void,         glXCopyContext,           (Display *dpy, GLXContext src, GLXContext dst, unsigned long mask),src,dst,mask)
 DEF_GLX_PROTO(Bool,         glXQueryExtension,        (Display *dpy, int *errorb, int *event),errorb,event)
 DEF_GLX_PROTO(Bool,         glXQueryVersion,          (Display *dpy, int *maj, int *min),maj,min)

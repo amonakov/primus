@@ -1,3 +1,4 @@
+// OpenGL extension functions needed by primus itself
 #ifdef PRIMUS_STRICT
 DEF_GLX_PROTO(void,     glGenBuffers,    (GLsizei n, GLuint *buffers))
 DEF_GLX_PROTO(void,     glDeleteBuffers, (GLsizei n, const GLuint *buffers))
