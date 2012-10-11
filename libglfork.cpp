@@ -39,6 +39,7 @@
 
 #include <dlfcn.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -231,7 +232,7 @@ static __thread struct TSPrimusInfo {
   // Pertaining to the display task
   struct D {
     pthread_t worker;
-    pthread_mutex_t dmutex, rmutex;
+    sem_t dsem, rsem;
     int width, height;
     GLvoid *buf;
     Display *dpy;
@@ -241,10 +242,16 @@ static __thread struct TSPrimusInfo {
 
     void spawn_worker()
     {
-      pthread_mutex_init(&dmutex, NULL);
-      pthread_mutex_lock(&dmutex);
-      pthread_mutex_init(&rmutex, NULL);
+      sem_init(&dsem, 0, 0);
+      sem_init(&rsem, 0, 1);
       pthread_create(&worker, NULL, dwork, (void*)this);
+    }
+    void reap_worker()
+    {
+      sem_destroy(&dsem);
+      sem_destroy(&rsem);
+      pthread_join(worker, NULL);
+      worker = 0;
     }
 
     void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
@@ -267,7 +274,7 @@ static __thread struct TSPrimusInfo {
   // Pertaining to the readback task
   struct R {
     pthread_t worker;
-    pthread_mutex_t amutex, rmutex;
+    sem_t asem, rsem;
     int width, height;
     GLXDrawable pbuffer;
     GLXContext context;
@@ -278,11 +285,16 @@ static __thread struct TSPrimusInfo {
 
     void spawn_worker()
     {
-      pthread_mutex_init(&amutex, NULL);
-      pthread_mutex_init(&rmutex, NULL);
-      pthread_mutex_lock(&rmutex);
-      pthread_mutex_lock(&amutex);
+      sem_init(&asem, 0, 0);
+      sem_init(&rsem, 0, 0);
       pthread_create(&worker, NULL, rwork, (void*)this);
+    }
+    void reap_worker()
+    {
+      sem_destroy(&asem);
+      sem_destroy(&rsem);
+      pthread_join(worker, NULL);
+      worker = 0;
     }
 
     void make_current(GLXDrawable draw, GLXContext actx, D *pd)
@@ -303,14 +315,13 @@ static __thread struct TSPrimusInfo {
   {
     d.make_current(dpy, draw, read, actx);
     r.make_current(draw, actx, &d);
-    pthread_mutex_unlock(&r.rmutex);
-    pthread_mutex_lock(&r.amutex);
+    sem_post(&r.rsem);
+    sem_wait(&r.asem);
     if (!draw || !actx)
     {
       assert(!draw && !actx);
-      pthread_join(d.worker, NULL);
-      pthread_join(r.worker, NULL);
-      r.worker = d.worker = 0;
+      d.reap_worker();
+      r.reap_worker();
     }
   }
 } tsprimus;
@@ -325,7 +336,7 @@ void* TSPrimusInfo::dwork(void *vd)
   Profiler profiler("display", state_names);
   for (;;)
   {
-    pthread_mutex_lock(&d.dmutex);
+    sem_wait(&d.dsem);
     profiler.tick(true);
     if (d.reinit)
     {
@@ -334,7 +345,7 @@ void* TSPrimusInfo::dwork(void *vd)
       primus.dfns.glXMakeCurrent(primus.ddpy, d.drawable, d.context);
       if (!d.drawable)
       {
-	pthread_mutex_unlock(&d.rmutex);
+	sem_post(&d.rsem);
 	return NULL;
       }
       primus.dfns.glViewport(0, 0, d.width, d.height);
@@ -348,13 +359,13 @@ void* TSPrimusInfo::dwork(void *vd)
       primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
       primus.dfns.glEnable(GL_TEXTURE_2D);
-      pthread_mutex_unlock(&d.rmutex);
+      sem_post(&d.rsem);
       continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
     profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
-    pthread_mutex_unlock(&d.rmutex);
+    sem_post(&d.rsem);
     primus.dfns.glXSwapBuffers(primus.ddpy, d.drawable);
     profiler.tick();
   }
@@ -370,25 +381,25 @@ void* TSPrimusInfo::rwork(void *vr)
   Profiler profiler("readback", state_names);
   for (;;)
   {
-    pthread_mutex_lock(&r.rmutex);
+    sem_wait(&r.rsem);
     profiler.tick(true);
     if (r.reinit)
     {
       r.reinit = false;
       if (pbos[0])
       {
-	pthread_mutex_lock(&r.pd->rmutex);
-	pthread_mutex_unlock(&r.pd->rmutex);
+	sem_wait(&r.pd->rsem);
+	sem_post(&r.pd->rsem);
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
       }
       r.pd->reinit = true;
-      pthread_mutex_unlock(&r.pd->dmutex);
-      pthread_mutex_lock(&r.pd->rmutex);
+      sem_post(&r.pd->dsem);
+      sem_wait(&r.pd->rsem);
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
       if (!r.pbuffer)
       {
-	pthread_mutex_unlock(&r.amutex);
+	sem_post(&r.asem);
 	return NULL;
       }
       if (!pbos[0])
@@ -398,12 +409,12 @@ void* TSPrimusInfo::rwork(void *vr)
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[0]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
-      pthread_mutex_unlock(&r.amutex);
+      sem_post(&r.asem);
       continue;
     }
     primus.afns.glWaitSync(r.sync, 0, GL_TIMEOUT_IGNORED);
     primus.afns.glReadPixels(0, 0, r.width, r.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
-    pthread_mutex_unlock(&r.amutex);
+    sem_post(&r.asem);
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
     profiler.tick();
     struct timespec tp;
@@ -411,14 +422,14 @@ void* TSPrimusInfo::rwork(void *vr)
     tp.tv_nsec += 20000000;
     tp.tv_sec  += tp.tv_nsec / 1000000000;
     tp.tv_nsec %= 1000000000;
-    if (pthread_mutex_timedlock(&r.pd->rmutex, &tp))
+    if (sem_timedwait(&r.pd->rsem, &tp))
     {
       primus_trace("warning: dropping a frame to avoid deadlock\n");
     }
     else
     {
       r.pd->buf = pixeldata;
-      pthread_mutex_unlock(&r.pd->dmutex);
+      sem_post(&r.pd->dsem);
       cbuf ^= 1;
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
     }
@@ -613,8 +624,8 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
     update_geometry(dpy, drawable, di);
   // Readback thread needs a sync object to avoid reading an incomplete frame
   tsprimus.r.sync = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-  pthread_mutex_unlock(&tsprimus.r.rmutex);
-  pthread_mutex_lock(&tsprimus.r.amutex);
+  sem_post(&tsprimus.r.rsem);
+  sem_wait(&tsprimus.r.asem);
   primus.afns.glDeleteSync(tsprimus.r.sync);
   primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
 }
