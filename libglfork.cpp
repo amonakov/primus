@@ -48,8 +48,6 @@
 #include <cstdio>
 #include <cassert>
 #include <map>
-#include <sstream>
-#include <iomanip>
 #include <GL/glx.h>
 
 #define primus_trace(...) do { if (1) fprintf(stderr, "primus: " __VA_ARGS__); } while(0)
@@ -105,8 +103,19 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
 
 // Profiler
 class Profiler {
+  const char *name;
+  const char * const *state_names;
+  int nstates;
+
+  int state;
+  double *state_time;
+  double prev_timestamp, print_timestamp;
+  int nframes;
 public:
-  Profiler(const char *name, const char **state_names) : name(name), state_names(state_names), nstates(0), state(0), nframes(0)
+  Profiler(const char *name, const char * const *state_names):
+    name(name),
+    state_names(state_names),
+    nstates(0), state(0), nframes(0)
   {
     while (state_names[nstates]) ++nstates; // count number of states
     state_time = new double[nstates];
@@ -117,7 +126,8 @@ public:
     double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
     prev_timestamp = print_timestamp = timestamp;
   }
-  ~Profiler() {
+  ~Profiler()
+  {
     delete [] state_time;
   }
   void tick(bool state_reset = false)
@@ -137,25 +147,15 @@ public:
     if (state != 0 || period < 5)
       return;
     // construct output
-    std::stringstream stream;
-    for (int i = 0; i < nstates; ++i) {
-      stream << ", " << std::fixed << std::setprecision(1) << (100 * state_time[i] / period) << "% " << state_names[i];
-    }
-    primus_trace("profiling: %s: %.1f fps%s\n", name, nframes / period, stream.str().c_str());
+    char buf[64], *cbuf = buf, *end = buf+64;
+    for (int i = 0; i < nstates; i++)
+      cbuf += snprintf(cbuf, end - cbuf, ", %.1f%% %s", 100 * state_time[i] / period, state_names[i]);
+    primus_trace("profiling: %s: %.1f fps%s\n", name, nframes / period, buf);
     // start counting again
     print_timestamp = timestamp;
     nframes = 0;
     memset(state_time, 0, sizeof(double)*nstates);
   }
-private:
-  const char *name;
-  const char **state_names;
-  int nstates;
-
-  int state;
-  double *state_time;
-  double prev_timestamp, print_timestamp;
-  int nframes;
 };
 
 // Runs before all other initialization takes place
