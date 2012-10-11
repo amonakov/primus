@@ -48,6 +48,8 @@
 #include <cstdio>
 #include <cassert>
 #include <map>
+#include <sstream>
+#include <iomanip>
 #include <GL/glx.h>
 
 #define primus_trace(...) do { if (1) fprintf(stderr, "primus: " __VA_ARGS__); } while(0)
@@ -101,6 +103,61 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
   }
 };
 
+// Profiler
+class Profiler {
+public:
+  Profiler(const char *name, const char **state_names) : name(name), state_names(state_names), nstates(0), state(0), nframes(0)
+  {
+    while (state_names[nstates]) ++nstates; // count number of states
+    state_time = new double[nstates];
+    memset(state_time, 0, sizeof(double)*nstates);
+    // reset time data
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+    prev_timestamp = print_timestamp = timestamp;
+  }
+  ~Profiler() {
+    delete [] state_time;
+  }
+  void tick(bool state_reset = false)
+  {
+    // update times
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+    if (state_reset)
+      state = 0;
+    state_time[state] += timestamp - prev_timestamp;
+    state = (state + 1) % nstates;
+    prev_timestamp = timestamp;
+    nframes += !!(state == 0);
+    // check if it's time to print again
+    double period = timestamp - print_timestamp; // time since we printed
+    if (state != 0 || period < 5)
+      return;
+    // construct output
+    std::stringstream stream;
+    for (int i = 0; i < nstates; ++i) {
+      stream << ", " << std::fixed << std::setprecision(1) << (100 * state_time[i] / period) << "% " << state_names[i];
+    }
+    primus_trace("profiling: %s: %.1f fps%s\n", name, nframes / period, stream.str().c_str());
+    // start counting again
+    print_timestamp = timestamp;
+    nframes = 0;
+    memset(state_time, 0, sizeof(double)*nstates);
+  }
+private:
+  const char *name;
+  const char **state_names;
+  int nstates;
+
+  int state;
+  double *state_time;
+  double prev_timestamp, print_timestamp;
+  int nframes;
+};
+
 // Runs before all other initialization takes place
 struct EarlyInitializer {
   EarlyInitializer()
@@ -119,6 +176,7 @@ struct EarlyInitializer {
     send(sock, &c, 1, 0);
     recv(sock, &c, 1, 0);
     assert(c == 'Y' && "bumblebeed failed");
+    // the socket will be closed when the application quits, then bumblebee will shut down the secondary X
 #else
 #warning Building without Bumblebee daemon support
 #endif
@@ -181,41 +239,6 @@ static __thread struct TSPrimusInfo {
     GLXContext context;
     bool reinit;
 
-    struct {
-      enum State {Wait, Upload, DrawSwap, NStates} state;
-      double state_time[NStates];
-      double prev_timestamp, old_timestamp;
-      int nframes;
-
-      void init()
-      {
-	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp);
-	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
-	prev_timestamp = old_timestamp = timestamp;
-      }
-      void tick(bool state_reset = false)
-      {
-	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp);
-	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
-	if (state_reset)
-	  state = Wait;
-	state_time[state] += timestamp - prev_timestamp;
-	state = (State)((state + 1) % NStates);
-	prev_timestamp = timestamp;
-	nframes += !!(state == Wait);
-	double period = timestamp - old_timestamp;
-	if (state != Wait || period < 5)
-	  return;
-	primus_trace("profiling: display: %.1f fps, %.1f%% wait, %.1f%% upload, %.1f%% draw+swap\n", nframes / period,
-	             100 * state_time[Wait] / period, 100 * state_time[Upload] / period, 100 * state_time[DrawSwap] / period);
-	old_timestamp = timestamp;
-	nframes = 0;
-	memset(state_time, 0, sizeof(state_time));
-      }
-    } profiler;
-
     void spawn_worker()
     {
       pthread_mutex_init(&dmutex, NULL);
@@ -252,41 +275,6 @@ static __thread struct TSPrimusInfo {
     D *pd;
     bool reinit;
     GLsync sync;
-
-    struct {
-      enum State {App, Map, Wait, NStates} state;
-      double state_time[NStates];
-      double prev_timestamp, old_timestamp;
-      int nframes;
-
-      void init()
-      {
-	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp);
-	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
-	prev_timestamp = old_timestamp = timestamp;
-      }
-      void tick(bool state_reset = false)
-      {
-	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp);
-	double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
-	if (state_reset)
-	  state = App;
-	state_time[state] += timestamp - prev_timestamp;
-	state = (State)((state + 1) % NStates);
-	prev_timestamp = timestamp;
-	nframes += !!(state == App);
-	double T = timestamp - old_timestamp;
-	if (state != App || T < 5)
-	  return;
-	primus_trace("profiling: readback: %.1f fps, %.1f%% app, %.1f%% map, %.1f%% wait\n", nframes / T,
-	             100 * state_time[App] / T, 100 * state_time[Map] / T, 100 * state_time[Wait] / T);
-	old_timestamp = timestamp;
-	nframes = 0;
-	memset(state_time, 0, sizeof(state_time));
-      }
-    } profiler;
 
     void spawn_worker()
     {
@@ -333,11 +321,12 @@ void* TSPrimusInfo::dwork(void *vd)
   int width, height;
   static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
   static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
-  d.profiler.init();
+  static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
+  Profiler profiler("display", state_names);
   for (;;)
   {
     pthread_mutex_lock(&d.dmutex);
-    d.profiler.tick(true);
+    profiler.tick(true);
     if (d.reinit)
     {
       d.reinit = false;
@@ -363,11 +352,11 @@ void* TSPrimusInfo::dwork(void *vd)
       continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
-    d.profiler.tick();
+    profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     pthread_mutex_unlock(&d.rmutex);
     primus.dfns.glXSwapBuffers(primus.ddpy, d.drawable);
-    d.profiler.tick();
+    profiler.tick();
   }
   return NULL;
 }
@@ -377,11 +366,12 @@ void* TSPrimusInfo::rwork(void *vr)
   GLuint pbos[2] = {0};
   int cbuf = 0;
   struct R &r = *(R *)vr;
-  r.profiler.init();
+  static const char *state_names[] = {"app", "map", "wait", NULL};
+  Profiler profiler("readback", state_names);
   for (;;)
   {
     pthread_mutex_lock(&r.rmutex);
-    r.profiler.tick(true);
+    profiler.tick(true);
     if (r.reinit)
     {
       r.reinit = false;
@@ -415,7 +405,7 @@ void* TSPrimusInfo::rwork(void *vr)
     primus.afns.glReadPixels(0, 0, r.width, r.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
     pthread_mutex_unlock(&r.amutex);
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
-    r.profiler.tick();
+    profiler.tick();
     struct timespec tp;
     clock_gettime(CLOCK_REALTIME, &tp);
     tp.tv_nsec += 20000000;
@@ -433,7 +423,7 @@ void* TSPrimusInfo::rwork(void *vr)
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
     }
     primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
-    r.profiler.tick();
+    profiler.tick();
   }
   return NULL;
 }
