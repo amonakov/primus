@@ -448,8 +448,6 @@ void* TSPrimusInfo::R::work(void *vr)
 // Find appropriate FBConfigs on both adpy and ddpy for a given Visual
 static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs, GLXFBConfig **dcfgs)
 {
-  static int (*dglXGetConfig)(Display*, XVisualInfo*, int, int*)
-    = (int (*)(Display*, XVisualInfo*, int, int*)) dlsym(primus.dfns.handle, "glXGetConfig");
   int acfgattrs[] = {
     GLX_DRAWABLE_TYPE,	GLX_WINDOW_BIT,
     GLX_RENDER_TYPE, GLX_RGBA_BIT,
@@ -470,21 +468,21 @@ static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs,
     GLX_SAMPLES, 0,
     None
   };
-  dglXGetConfig(dpy, vis, GLX_DOUBLEBUFFER, &acfgattrs[5]);
-  dglXGetConfig(dpy, vis, GLX_STEREO,       &acfgattrs[7]);
-  dglXGetConfig(dpy, vis, GLX_AUX_BUFFERS,  &acfgattrs[9]);
-  dglXGetConfig(dpy, vis, GLX_RED_SIZE,     &acfgattrs[11]);
-  dglXGetConfig(dpy, vis, GLX_GREEN_SIZE,   &acfgattrs[13]);
-  dglXGetConfig(dpy, vis, GLX_BLUE_SIZE,    &acfgattrs[15]);
-  dglXGetConfig(dpy, vis, GLX_ALPHA_SIZE,   &acfgattrs[17]);
-  dglXGetConfig(dpy, vis, GLX_DEPTH_SIZE,   &acfgattrs[19]);
-  dglXGetConfig(dpy, vis, GLX_STENCIL_SIZE, &acfgattrs[21]);
-  dglXGetConfig(dpy, vis, GLX_ACCUM_RED_SIZE,   &acfgattrs[23]);
-  dglXGetConfig(dpy, vis, GLX_ACCUM_GREEN_SIZE, &acfgattrs[25]);
-  dglXGetConfig(dpy, vis, GLX_ACCUM_BLUE_SIZE,  &acfgattrs[27]);
-  dglXGetConfig(dpy, vis, GLX_ACCUM_ALPHA_SIZE, &acfgattrs[29]);
-  dglXGetConfig(dpy, vis, GLX_SAMPLE_BUFFERS, &acfgattrs[31]);
-  dglXGetConfig(dpy, vis, GLX_SAMPLES,        &acfgattrs[33]);
+  glXGetConfig(dpy, vis, GLX_DOUBLEBUFFER, &acfgattrs[5]);
+  glXGetConfig(dpy, vis, GLX_STEREO,       &acfgattrs[7]);
+  glXGetConfig(dpy, vis, GLX_AUX_BUFFERS,  &acfgattrs[9]);
+  glXGetConfig(dpy, vis, GLX_RED_SIZE,     &acfgattrs[11]);
+  glXGetConfig(dpy, vis, GLX_GREEN_SIZE,   &acfgattrs[13]);
+  glXGetConfig(dpy, vis, GLX_BLUE_SIZE,    &acfgattrs[15]);
+  glXGetConfig(dpy, vis, GLX_ALPHA_SIZE,   &acfgattrs[17]);
+  glXGetConfig(dpy, vis, GLX_DEPTH_SIZE,   &acfgattrs[19]);
+  glXGetConfig(dpy, vis, GLX_STENCIL_SIZE, &acfgattrs[21]);
+  glXGetConfig(dpy, vis, GLX_ACCUM_RED_SIZE,   &acfgattrs[23]);
+  glXGetConfig(dpy, vis, GLX_ACCUM_GREEN_SIZE, &acfgattrs[25]);
+  glXGetConfig(dpy, vis, GLX_ACCUM_BLUE_SIZE,  &acfgattrs[27]);
+  glXGetConfig(dpy, vis, GLX_ACCUM_ALPHA_SIZE, &acfgattrs[29]);
+  glXGetConfig(dpy, vis, GLX_SAMPLE_BUFFERS, &acfgattrs[31]);
+  glXGetConfig(dpy, vis, GLX_SAMPLES,        &acfgattrs[33]);
   //assert(acfgattrs[5] && !acfgattrs[7]);
   int ncfg;
   *acfgs = primus.afns.glXChooseFBConfig(primus.adpy, 0, acfgattrs, &ncfg);
