@@ -328,6 +328,7 @@ void* TSPrimusInfo::dwork(void *vd)
 {
   struct D &d = *(D *)vd;
   int width, height;
+  GLXDrawable drawable;
   static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
   static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
@@ -339,9 +340,9 @@ void* TSPrimusInfo::dwork(void *vd)
     if (d.reinit)
     {
       d.reinit = false;
-      width = d.width; height = d.height;
-      primus.dfns.glXMakeCurrent(primus.ddpy, d.drawable, d.context);
-      if (!d.drawable)
+      width = d.width; height = d.height; drawable = d.drawable;
+      primus.dfns.glXMakeCurrent(primus.ddpy, drawable, d.context);
+      if (!drawable)
       {
 	sem_post(&d.rsem);
 	return NULL;
@@ -364,7 +365,7 @@ void* TSPrimusInfo::dwork(void *vd)
     profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     sem_post(&d.rsem);
-    primus.dfns.glXSwapBuffers(primus.ddpy, d.drawable);
+    primus.dfns.glXSwapBuffers(primus.ddpy, drawable);
     profiler.tick();
   }
   return NULL;
