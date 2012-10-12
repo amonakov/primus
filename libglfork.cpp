@@ -49,7 +49,11 @@
 #include <cstdio>
 #include <cassert>
 #include <map>
+#pragma GCC visibility push(default)
+#define GLX_GLXEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES
 #include <GL/glx.h>
+#pragma GCC visibility pop
 
 #define primus_trace(...) do { if (1) fprintf(stderr, "primus: " __VA_ARGS__); } while(0)
 
@@ -769,14 +773,14 @@ ret name par \
 
 // OpenGL forwarders
 #define DEF_GLX_PROTO(ret, name, par, ...) \
-extern "C" ret name par \
+ret name par \
 { return primus.afns.name(__VA_ARGS__); }
 #include "gl-passthru.def"
 #undef DEF_GLX_PROTO
 
 // GLX extensions
 
-extern "C" int glXSwapIntervalSGI(int interval)
+int glXSwapIntervalSGI(int interval)
 {
   return 1; // Indicate failure to set swapinterval
 }
