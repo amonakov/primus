@@ -19,4 +19,4 @@ CXXFLAGS += -DPRIMUS_libGLd=$(PRIMUS_libGLd)
 
 $(LIBDIR)/libGL.so.1: libglfork.cpp
 	mkdir -p $(LIBDIR)
-	$(CXX) $(CXXFLAGS) -fvisibility=hidden -fPIC -shared -o $@ $< -lX11 -lpthread -lrt
+	$(CXX) $(CXXFLAGS) -fvisibility=hidden -fPIC -shared -Wl,-Bsymbolic -o $@ $< -lX11 -lpthread -lrt
