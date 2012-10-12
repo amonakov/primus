@@ -256,8 +256,6 @@ static __thread struct TSPrimusInfo {
 
     void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
     {
-      if (draw && primus.drawables[draw].kind == DrawableInfo::Pbuffer)
-	return;
       if (!worker)
 	spawn_worker();
       this->dpy = dpy;
@@ -299,8 +297,6 @@ static __thread struct TSPrimusInfo {
 
     void make_current(GLXDrawable draw, GLXContext actx, D *pd)
     {
-      if (draw && primus.drawables[draw].kind == DrawableInfo::Pbuffer)
-	return;
       if (!worker)
 	spawn_worker();
       this->pbuffer = draw ? primus.drawables[draw].pbuffer : 0;
@@ -313,6 +309,8 @@ static __thread struct TSPrimusInfo {
   } r;
   void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
   {
+    if (draw && primus.drawables[draw].kind == DrawableInfo::Pbuffer)
+      return;
     d.make_current(dpy, draw, read, actx);
     r.make_current(draw, actx, &d);
     sem_post(&r.rsem);
