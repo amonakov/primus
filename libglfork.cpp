@@ -365,9 +365,9 @@ void* TSPrimusInfo::D::work(void *vd)
       continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
+    sem_post(&d.rsem);
     profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
-    sem_post(&d.rsem);
     primus.dfns.glXSwapBuffers(primus.ddpy, drawable);
     profiler.tick();
   }
