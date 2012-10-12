@@ -53,6 +53,23 @@
 
 #define primus_trace(...) do { if (1) fprintf(stderr, "primus: " __VA_ARGS__); } while(0)
 
+// export functions explicitely to avoid polluting the global namespace with our classes
+#define PRIMUS_EXPORTED __attribute__((__visibility__("default")))
+
+#define DEF_GLX_PROTO(ret, name, par, ...) \
+extern "C" ret name par PRIMUS_EXPORTED;
+#include "gl-passthru.def"
+#include "glxext-reimpl.def"
+#undef DEF_GLX_PROTO
+
+#define DEF_GLX_PROTO(ret, name, par, ...) \
+ret name par PRIMUS_EXPORTED;
+#include "glx-reimpl.def"
+#include "glx-dpyredir.def"
+#undef DEF_GLX_PROTO
+
+#undef PRIMUS_EXPORTED
+
 // Pointers to implemented/forwarded GLX and OpenGL functions
 struct CapturedFns {
   void *handle;
