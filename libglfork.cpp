@@ -533,13 +533,12 @@ GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType,
 
 void glXDestroyContext(Display *dpy, GLXContext ctx)
 {
-  //GLXContext dctx = primus.actx2dctx[ctx];
+  GLXContext dctx = primus.actx2dctx[ctx];
   GLXContext rctx = primus.actx2rctx[ctx];
   primus.actx2dctx.erase(ctx);
   primus.actx2rctx.erase(ctx);
   primus.actx2fbconfig.erase(ctx);
-  //FIXME: This causes a BadMatch in SMB
-  //primus.dfns.glXDestroyContext(primus.ddpy, dctx);
+  primus.dfns.glXDestroyContext(primus.ddpy, dctx);
   primus.afns.glXDestroyContext(primus.adpy, rctx);
   primus.afns.glXDestroyContext(primus.adpy, ctx);
 }
