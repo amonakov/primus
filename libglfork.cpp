@@ -232,6 +232,8 @@ static __thread struct TSPrimusInfo {
   // Pertaining to the display task
   struct D {
     pthread_t worker;
+    // D worker waits on dsem to reinit or draw the buffer given to it
+    // R worker waits on rsem to unmap the PBO being drawn from
     sem_t dsem, rsem;
     int width, height;
     GLvoid *buf;
@@ -243,7 +245,7 @@ static __thread struct TSPrimusInfo {
     void spawn_worker()
     {
       sem_init(&dsem, 0, 0);
-      sem_init(&rsem, 0, 1);
+      sem_init(&rsem, 0, 1); // No PBO is mapped initially, let R worker proceed
       pthread_create(&worker, NULL, dwork, (void*)this);
     }
     void reap_worker()
@@ -258,6 +260,7 @@ static __thread struct TSPrimusInfo {
     {
       if (!worker)
 	spawn_worker();
+      // D worker saves drawable, width, height in local vars upon reinit
       this->dpy = dpy;
       this->drawable = draw;
       this->read_drawable = read;
@@ -272,6 +275,8 @@ static __thread struct TSPrimusInfo {
   // Pertaining to the readback task
   struct R {
     pthread_t worker;
+    // The application thread waits on asem to swap buffers
+    // R worker waits on rsem to start frame readback
     sem_t asem, rsem;
     int width, height;
     GLXDrawable pbuffer;
@@ -313,8 +318,8 @@ static __thread struct TSPrimusInfo {
       return;
     d.make_current(dpy, draw, read, actx);
     r.make_current(draw, actx, &d);
-    sem_post(&r.rsem);
-    sem_wait(&r.asem);
+    sem_post(&r.rsem); // Signal R worker, it will signal D worker
+    sem_wait(&r.asem); // Wait until R (and D) completed reinit
     if (!draw || !actx)
     {
       assert(!draw && !actx);
@@ -385,16 +390,16 @@ void* TSPrimusInfo::rwork(void *vr)
     if (r.reinit)
     {
       r.reinit = false;
-      sem_wait(&r.pd->rsem);
+      sem_wait(&r.pd->rsem); // Wait for D worker, if active
       if (pbos[0])
       {
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
       }
       r.pd->reinit = true;
-      sem_post(&r.pd->dsem);
-      sem_wait(&r.pd->rsem);
-      sem_post(&r.pd->rsem);
+      sem_post(&r.pd->dsem); // Signal D worker to reinit
+      sem_wait(&r.pd->rsem); // Wait until reinit was completed
+      sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
       if (!r.pbuffer)
       {
@@ -495,7 +500,7 @@ GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList
   GLXContext rctx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, actx, direct);
   primus.actx2dctx[actx] = dctx;
   primus.actx2rctx[actx] = rctx;
-  primus.actx2fbconfig[actx] = *acfgs;;
+  primus.actx2fbconfig[actx] = *acfgs;
   if (direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx))
     primus_trace("warning: failed to acquire direct rendering context for display thread\n");
   return actx;
@@ -622,8 +627,8 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
     update_geometry(dpy, drawable, di);
   // Readback thread needs a sync object to avoid reading an incomplete frame
   tsprimus.r.sync = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-  sem_post(&tsprimus.r.rsem);
-  sem_wait(&tsprimus.r.asem);
+  sem_post(&tsprimus.r.rsem); // Signal the readback worker thread
+  sem_wait(&tsprimus.r.asem); // Wait until it has issued glReadBuffer
   primus.afns.glDeleteSync(tsprimus.r.sync);
   primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
 }
