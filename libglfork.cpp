@@ -227,10 +227,9 @@ static struct PrimusInfo {
 // threads: the readback task, and the display task.
 static __thread struct TSPrimusInfo {
 
-  static void* dwork(void *vd);
-
   // Pertaining to the display task
   struct D {
+    static void* work(void *vd);
     pthread_t worker;
     // D worker waits on dsem to reinit or draw the buffer given to it
     // R worker waits on rsem to unmap the PBO being drawn from
@@ -246,7 +245,7 @@ static __thread struct TSPrimusInfo {
     {
       sem_init(&dsem, 0, 0);
       sem_init(&rsem, 0, 1); // No PBO is mapped initially, let R worker proceed
-      pthread_create(&worker, NULL, dwork, (void*)this);
+      pthread_create(&worker, NULL, work, (void*)this);
     }
     void reap_worker()
     {
@@ -270,10 +269,9 @@ static __thread struct TSPrimusInfo {
     }
   } d;
 
-  static void* rwork(void *vr);
-
   // Pertaining to the readback task
   struct R {
+    static void* work(void *vr);
     pthread_t worker;
     // The application thread waits on asem to swap buffers
     // R worker waits on rsem to start frame readback
@@ -290,7 +288,7 @@ static __thread struct TSPrimusInfo {
     {
       sem_init(&asem, 0, 0);
       sem_init(&rsem, 0, 0);
-      pthread_create(&worker, NULL, rwork, (void*)this);
+      pthread_create(&worker, NULL, work, (void*)this);
     }
     void reap_worker()
     {
@@ -329,7 +327,7 @@ static __thread struct TSPrimusInfo {
   }
 } tsprimus;
 
-void* TSPrimusInfo::dwork(void *vd)
+void* TSPrimusInfo::D::work(void *vd)
 {
   struct D &d = *(D *)vd;
   int width, height;
@@ -376,7 +374,7 @@ void* TSPrimusInfo::dwork(void *vd)
   return NULL;
 }
 
-void* TSPrimusInfo::rwork(void *vr)
+void* TSPrimusInfo::R::work(void *vr)
 {
   GLuint pbos[2] = {0};
   int cbuf = 0;
