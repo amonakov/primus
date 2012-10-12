@@ -386,16 +386,16 @@ void* TSPrimusInfo::rwork(void *vr)
     if (r.reinit)
     {
       r.reinit = false;
+      sem_wait(&r.pd->rsem);
       if (pbos[0])
       {
-	sem_wait(&r.pd->rsem);
-	sem_post(&r.pd->rsem);
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
       }
       r.pd->reinit = true;
       sem_post(&r.pd->dsem);
       sem_wait(&r.pd->rsem);
+      sem_post(&r.pd->rsem);
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
       if (!r.pbuffer)
       {
