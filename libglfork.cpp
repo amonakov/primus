@@ -248,9 +248,9 @@ static __thread struct TSPrimusInfo {
     }
     void reap_worker()
     {
+      pthread_join(worker, NULL);
       sem_destroy(&dsem);
       sem_destroy(&rsem);
-      pthread_join(worker, NULL);
       worker = 0;
     }
 
@@ -291,9 +291,9 @@ static __thread struct TSPrimusInfo {
     }
     void reap_worker()
     {
+      pthread_join(worker, NULL);
       sem_destroy(&asem);
       sem_destroy(&rsem);
-      pthread_join(worker, NULL);
       worker = 0;
     }
 
