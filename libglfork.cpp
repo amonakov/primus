@@ -306,6 +306,7 @@ static __thread struct TSPrimusInfo {
     {
       if (!worker)
 	spawn_worker();
+      // R::work accesses these only prior to signaling asem
       this->pbuffer = draw ? primus.drawables[draw].pbuffer : 0;
       this->context = actx ? primus.actx2rctx[actx] : NULL;
       this->width   = draw ? primus.drawables[draw].width  : 0;
@@ -325,6 +326,7 @@ static __thread struct TSPrimusInfo {
     if (!draw || !actx)
     {
       assert(!draw && !actx);
+      // As asem was posted, R::work and D::work are terminating after seeing NULL context
       d.reap_worker();
       r.reap_worker();
     }
