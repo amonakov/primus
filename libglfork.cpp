@@ -248,7 +248,7 @@ static __thread struct TSPrimusInfo {
     void spawn_worker()
     {
       sem_init(&dsem, 0, 0);
-      sem_init(&rsem, 0, 1); // No PBO is mapped initially, let R worker proceed
+      sem_init(&rsem, 0, 0);
       pthread_create(&worker, NULL, work, (void*)this);
     }
     void reap_worker()
@@ -371,10 +371,10 @@ void* TSPrimusInfo::D::work(void *vd)
       continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
-    sem_post(&d.rsem);
     profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     primus.dfns.glXSwapBuffers(primus.ddpy, drawable);
+    sem_post(&d.rsem);
     profiler.tick();
   }
   return NULL;
@@ -394,7 +394,6 @@ void* TSPrimusInfo::R::work(void *vr)
     if (r.reinit)
     {
       r.reinit = false;
-      sem_wait(&r.pd->rsem); // Wait for D worker, if active
       if (pbos[0])
       {
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
@@ -403,7 +402,6 @@ void* TSPrimusInfo::R::work(void *vr)
       r.pd->reinit = true;
       sem_post(&r.pd->dsem); // Signal D worker to reinit
       sem_wait(&r.pd->rsem); // Wait until reinit was completed
-      sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
       if (!r.pbuffer)
       {
@@ -422,27 +420,16 @@ void* TSPrimusInfo::R::work(void *vr)
     }
     primus.afns.glWaitSync(r.sync, 0, GL_TIMEOUT_IGNORED);
     primus.afns.glReadPixels(0, 0, r.width, r.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
-    sem_post(&r.asem);
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
     profiler.tick();
-    struct timespec tp;
-    clock_gettime(CLOCK_REALTIME, &tp);
-    tp.tv_nsec += 20000000;
-    tp.tv_sec  += tp.tv_nsec / 1000000000;
-    tp.tv_nsec %= 1000000000;
-    if (sem_timedwait(&r.pd->rsem, &tp))
-    {
-      primus_trace("warning: dropping a frame to avoid deadlock\n");
-    }
-    else
-    {
-      r.pd->buf = pixeldata;
-      sem_post(&r.pd->dsem);
-      cbuf ^= 1;
-      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
-    }
+    r.pd->buf = pixeldata;
+    sem_post(&r.pd->dsem);
+    sem_wait(&r.pd->rsem);
     primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
+    sem_post(&r.asem);
     profiler.tick();
+    cbuf ^= 1;
+    primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
   }
   return NULL;
 }
