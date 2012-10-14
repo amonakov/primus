@@ -196,7 +196,7 @@ struct EarlyInitializer {
 static struct PrimusInfo {
   EarlyInitializer ei;
   // Readback-display synchronization method
-  // 0: no sync, 1: fully synced
+  // 0: no sync, 1: D lags behind one frame, 2: fully synced
   int sync;
   // The "accelerating" X display
   Display *adpy;
@@ -444,6 +444,8 @@ void* TSPrimusInfo::R::work(void *vr)
     primus.afns.glReadPixels(0, 0, r.width, r.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
     if (!primus.sync)
       sem_post(&r.asem); // Unblock main thread as soon as possible
+    if (primus.sync == 1) // Get the previous framebuffer
+      primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
     profiler.tick();
     clock_gettime(CLOCK_REALTIME, &tp);

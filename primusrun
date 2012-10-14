@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Readback-display synchronization method
-# 0: no sync, 1: fully synced
+# 0: no sync, 1: D lags behind one frame, 2: fully synced
 # export PRIMUS_SYNC=${PRIMUS_SYNC:-0}
 
 # Secondary display
