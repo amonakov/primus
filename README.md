@@ -40,6 +40,20 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
         unset PRIMUS_libGLa
         unset PRIMUS_libGLd
 
+Issues under compositing WMs
+----------------------------
+
+Since compositing hurts performance, invoking primus when a compositing WM is
+active is not recommended.  If you need to use primus with compositing and see
+flickering or bad performance, synchronizing primus' display thread with the
+application's rendering thread may help (can anyone investigate why?):
+
+    PRIMUS_SYNC=1 primusrun ...
+
+This makes primus display the previously rendered frame. Alternatively,
+with `PRIMUS_SYNC=2` primus will display the latest rendered frame, trading
+frame rate for reduced visual latency.
+
 On benchmarking
 ---------------
 
