@@ -37,6 +37,8 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
         LIBDIR=x86_64-linux-gnu make
         export PRIMUS_libGLa="'"'"/usr/lib32/nvidia-current/libGL.so.1"'"'"
         LIBDIR=i386-linux-gnu CXX=g++\ -m32 make
+        unset PRIMUS_libGLa
+        unset PRIMUS_libGLd
 
 On benchmarking
 ---------------
