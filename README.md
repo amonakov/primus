@@ -27,15 +27,15 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
 * Gentoo needs `lib64` and `lib32`
 * RPM-based may need `lib64` and `lib`
 * Debian (with multiarch) needs `lib/x86_64-linux-gnu` and `lib/i386-linux-gnu`
-* Ubuntu (with multiarch) seems rather inconistent.  The dynamic linker
+* Ubuntu (with multiarch) seems rather inconsistent.  The dynamic linker
   expands `$LIB` to `x86_64-linux-gnu`/`i386-linux-gnu` (without `lib/`), but
   Nvidia drivers are installed into `/usr/lib{,32}/nvidia-current`. Something
   like the following is needed:
 
-        export PRIMUS_libGLd='/usr/lib/$LIB/mesa/libGL.so.1'
-        export PRIMUS_libGLa='/usr/lib/nvidia-current/libGL.so.1'
+        export PRIMUS_libGLd='"/usr/lib/$$LIB/mesa/libGL.so.1"'
+        export PRIMUS_libGLa='"/usr/lib/nvidia-current/libGL.so.1"'
         LIBDIR=x86_64-linux-gnu make
-        export PRIMUS_libGLa='/usr/lib32/nvidia-current/libGL.so.1'
+        export PRIMUS_libGLa='"/usr/lib32/nvidia-current/libGL.so.1"'
         LIBDIR=i386-linux-gnu CXX=g++\ -m32 make
 
 On benchmarking
