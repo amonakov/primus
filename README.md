@@ -44,6 +44,6 @@ On benchmarking
 Please note that VirtualGL does not really display all frames it
 gets from the offload slave.  By default, primus does render all frames
 it gets from the secondary server, except when the display thread
-locks up for longer than 20 milliseconds.
+locks up for longer than a second.
 
 For an interesting comparison, play around with `ipers` from mesa-demos.
