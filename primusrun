@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Readback-display synchronization method
+# 0: no sync, 1: fully synced
+# export PRIMUS_SYNC=${PRIMUS_SYNC:-0}
+
 # Secondary display
 # export PRIMUS_DISPLAY=${PRIMUS_DISPLAY:-:8}
 

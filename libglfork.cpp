@@ -195,6 +195,9 @@ struct EarlyInitializer {
 // Process-wide data
 static struct PrimusInfo {
   EarlyInitializer ei;
+  // Readback-display synchronization method
+  // 0: no sync, 1: fully synced
+  int sync;
   // The "accelerating" X display
   Display *adpy;
   // The "displaying" X display. The same as the application is using, but
@@ -213,6 +216,7 @@ static struct PrimusInfo {
   std::map<GLXContext, GLXContext> actx2rctx;
 
   PrimusInfo():
+    sync(atoi(getconf(PRIMUS_SYNC))),
     adpy(XOpenDisplay(getconf(PRIMUS_DISPLAY))),
     ddpy(XOpenDisplay(NULL)),
     needed_global(dlopen(getconf(PRIMUS_LOAD_GLOBAL), RTLD_LAZY | RTLD_GLOBAL)),
@@ -371,10 +375,13 @@ void* TSPrimusInfo::D::work(void *vd)
       continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
-    sem_post(&d.rsem);
+    if (!primus.sync)
+      sem_post(&d.rsem); // Unlock as soon as possible
     profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     primus.dfns.glXSwapBuffers(primus.ddpy, drawable);
+    if (primus.sync)
+      sem_post(&d.rsem); // Unlock only after drawing
     profiler.tick();
   }
   return NULL;
@@ -388,7 +395,8 @@ void* TSPrimusInfo::R::work(void *vr)
   static const char *state_names[] = {"app", "map", "wait", NULL};
   Profiler profiler("readback", state_names);
   struct timespec tp;
-  sem_post(&r.pd->rsem); // No PBO is mapped initially
+  if (!primus.sync)
+    sem_post(&r.pd->rsem); // No PBO is mapped initially
   for (;;)
   {
     sem_wait(&r.rsem);
@@ -399,7 +407,7 @@ void* TSPrimusInfo::R::work(void *vr)
       clock_gettime(CLOCK_REALTIME, &tp);
       tp.tv_sec  += 1;
       // Wait for D worker, if active
-      if (sem_timedwait(&r.pd->rsem, &tp))
+      if (!primus.sync && sem_timedwait(&r.pd->rsem, &tp))
       {
 	pthread_cancel(r.pd->worker);
 	primus_trace("warning: killed a worker to proceed\n");
@@ -414,7 +422,8 @@ void* TSPrimusInfo::R::work(void *vr)
       r.pd->reinit = true;
       sem_post(&r.pd->dsem); // Signal D worker to reinit
       sem_wait(&r.pd->rsem); // Wait until reinit was completed
-      sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
+      if (!primus.sync)
+	sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
       if (!r.pbuffer)
       {
@@ -433,17 +442,23 @@ void* TSPrimusInfo::R::work(void *vr)
     }
     primus.afns.glWaitSync(r.sync, 0, GL_TIMEOUT_IGNORED);
     primus.afns.glReadPixels(0, 0, r.width, r.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
-    sem_post(&r.asem);
+    if (!primus.sync)
+      sem_post(&r.asem); // Unblock main thread as soon as possible
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
     profiler.tick();
     clock_gettime(CLOCK_REALTIME, &tp);
     tp.tv_sec  += 1;
-    if (sem_timedwait(&r.pd->rsem, &tp))
+    if (!primus.sync && sem_timedwait(&r.pd->rsem, &tp))
       primus_trace("warning: dropping a frame to avoid deadlock\n");
     else
     {
       r.pd->buf = pixeldata;
       sem_post(&r.pd->dsem);
+      if (primus.sync)
+      {
+	sem_wait(&r.pd->rsem);
+	sem_post(&r.asem); // Unblock main thread only after D::work has completed
+      }
       cbuf ^= 1;
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
     }
