@@ -387,6 +387,7 @@ void* TSPrimusInfo::R::work(void *vr)
   struct R &r = *(R *)vr;
   static const char *state_names[] = {"app", "map", "wait", NULL};
   Profiler profiler("readback", state_names);
+  struct timespec tp;
   for (;;)
   {
     sem_wait(&r.rsem);
@@ -394,7 +395,16 @@ void* TSPrimusInfo::R::work(void *vr)
     if (r.reinit)
     {
       r.reinit = false;
-      sem_wait(&r.pd->rsem); // Wait for D worker, if active
+      clock_gettime(CLOCK_REALTIME, &tp);
+      tp.tv_sec  += 1;
+      // Wait for D worker, if active
+      if (sem_timedwait(&r.pd->rsem, &tp))
+      {
+	pthread_cancel(r.pd->worker);
+	primus_trace("warning: killed a worker to proceed\n");
+	sem_post(&r.pd->rsem); // Pretend that D worker completed reinit
+	assert(!r.pbuffer);    // Cannot proceed without the buddy
+      }
       if (pbos[0])
       {
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
@@ -425,15 +435,10 @@ void* TSPrimusInfo::R::work(void *vr)
     sem_post(&r.asem);
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
     profiler.tick();
-    struct timespec tp;
     clock_gettime(CLOCK_REALTIME, &tp);
-    tp.tv_nsec += 20000000;
-    tp.tv_sec  += tp.tv_nsec / 1000000000;
-    tp.tv_nsec %= 1000000000;
+    tp.tv_sec  += 1;
     if (sem_timedwait(&r.pd->rsem, &tp))
-    {
       primus_trace("warning: dropping a frame to avoid deadlock\n");
-    }
     else
     {
       r.pd->buf = pixeldata;
