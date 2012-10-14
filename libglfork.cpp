@@ -248,7 +248,7 @@ static __thread struct TSPrimusInfo {
     void spawn_worker()
     {
       sem_init(&dsem, 0, 0);
-      sem_init(&rsem, 0, 1); // No PBO is mapped initially, let R worker proceed
+      sem_init(&rsem, 0, 0);
       pthread_create(&worker, NULL, work, (void*)this);
     }
     void reap_worker()
@@ -388,6 +388,7 @@ void* TSPrimusInfo::R::work(void *vr)
   static const char *state_names[] = {"app", "map", "wait", NULL};
   Profiler profiler("readback", state_names);
   struct timespec tp;
+  sem_post(&r.pd->rsem); // No PBO is mapped initially
   for (;;)
   {
     sem_wait(&r.rsem);
