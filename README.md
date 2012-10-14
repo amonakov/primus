@@ -32,10 +32,10 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
   Nvidia drivers are installed into `/usr/lib{,32}/nvidia-current`. Something
   like the following is needed:
 
-        export PRIMUS_libGLd='"/usr/lib/$$LIB/mesa/libGL.so.1"'
-        export PRIMUS_libGLa='"/usr/lib/nvidia-current/libGL.so.1"'
+        export PRIMUS_libGLd="'"'"/usr/lib/$$LIB/mesa/libGL.so.1"'"'"
+        export PRIMUS_libGLa="'"'"/usr/lib/nvidia-current/libGL.so.1"'"'"
         LIBDIR=x86_64-linux-gnu make
-        export PRIMUS_libGLa='"/usr/lib32/nvidia-current/libGL.so.1"'
+        export PRIMUS_libGLa="'"'"/usr/lib32/nvidia-current/libGL.so.1"'"'"
         LIBDIR=i386-linux-gnu CXX=g++\ -m32 make
 
 On benchmarking
