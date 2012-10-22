@@ -96,6 +96,7 @@ struct DrawableInfo {
   enum {XWindow, Window, Pixmap, Pbuffer} kind;
   GLXFBConfig fbconfig;
   GLXPbuffer  pbuffer;
+  Drawable window;
   int width, height;
 };
 
@@ -597,6 +598,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
     assert(acfg);
     di.kind = di.XWindow;
     di.fbconfig = acfg;
+    di.window = draw;
     note_geometry(dpy, draw, &di.width, &di.height);
   }
   GLXPbuffer &pbuffer = di.pbuffer;
@@ -629,7 +631,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
 static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di)
 {
   int w, h;
-  note_geometry(dpy, drawable, &w, &h);
+  note_geometry(dpy, di.window, &w, &h);
   if (w == di.width && h == di.height)
     return;
   primus_trace("recreating backing pbuffer for a resized drawable\n");
@@ -648,7 +650,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
-  if (di.kind == di.XWindow)
+  if (di.kind == di.XWindow || di.kind == di.Window)
     update_geometry(dpy, drawable, di);
   // Readback thread needs a sync object to avoid reading an incomplete frame
   tsprimus.r.sync = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -664,6 +666,7 @@ GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const in
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
   di.fbconfig = config;
+  di.window = win;
   note_geometry(dpy, win, &di.width, &di.height);
   return glxwin;
 }
