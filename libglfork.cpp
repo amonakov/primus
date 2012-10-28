@@ -132,7 +132,7 @@ struct EarlyInitializer {
 #ifdef BUMBLEBEE_SOCKET
     // Signal the Bumblebee daemon to bring up secondary X
     errno = 0;
-    int sock = socket(PF_UNIX, SOCK_STREAM, 0);
+    int sock = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, BUMBLEBEE_SOCKET);
