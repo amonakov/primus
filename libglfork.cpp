@@ -16,7 +16,12 @@
 #include <GL/glx.h>
 #pragma GCC visibility pop
 
-#define primus_trace(...) do { if (1) fprintf(stderr, "primus: " __VA_ARGS__); } while(0)
+#define primus_print(c, ...) do { if (c) fprintf(stderr, "primus: " __VA_ARGS__); } while (0)
+
+#define die_if(cond, ...)  do {if (cond) {primus_print(true, "fatal: " __VA_ARGS__); exit(1);} } while (0)
+#define primus_warn(...) primus_print(primus.loglevel >= 1, "warning: " __VA_ARGS__)
+#define primus_sorry(...) primus_print(primus.loglevel >= 1, "sorry, not implemented: " __VA_ARGS__)
+#define primus_perf(...) primus_print(primus.loglevel >= 2, "profiling: " __VA_ARGS__)
 
 // Pointers to implemented/forwarded GLX and OpenGL functions
 struct CapturedFns {
@@ -31,10 +36,9 @@ struct CapturedFns {
 #undef DEF_GLX_PROTO
   CapturedFns(const char *lib)
   {
-    assert(lib && lib[0] == '/');
+    die_if(!lib || lib[0] != '/', "need absolute library path: %s\n", lib);
     handle = dlopen(lib, RTLD_LAZY);
-    primus_trace("loading %s\n", lib);
-    assert(handle);
+    die_if(!handle, "failed to load library %s\n", lib);
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)dlsym(handle, #name);
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
@@ -68,63 +72,6 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
   }
 };
 
-// Profiler
-class Profiler {
-  const char *name;
-  const char * const *state_names;
-  int nstates;
-
-  int state;
-  double *state_time;
-  double prev_timestamp, print_timestamp;
-  int nframes;
-public:
-  Profiler(const char *name, const char * const *state_names):
-    name(name),
-    state_names(state_names),
-    nstates(0), state(0), nframes(0)
-  {
-    while (state_names[nstates]) ++nstates; // count number of states
-    state_time = new double[nstates];
-    memset(state_time, 0, sizeof(double)*nstates);
-    // reset time data
-    struct timespec tp;
-    clock_gettime(CLOCK_MONOTONIC, &tp);
-    double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
-    prev_timestamp = print_timestamp = timestamp;
-  }
-  ~Profiler()
-  {
-    delete [] state_time;
-  }
-  void tick(bool state_reset = false)
-  {
-    // update times
-    struct timespec tp;
-    clock_gettime(CLOCK_MONOTONIC, &tp);
-    double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
-    if (state_reset)
-      state = 0;
-    state_time[state] += timestamp - prev_timestamp;
-    state = (state + 1) % nstates;
-    prev_timestamp = timestamp;
-    nframes += !!(state == 0);
-    // check if it's time to print again
-    double period = timestamp - print_timestamp; // time since we printed
-    if (state != 0 || period < 5)
-      return;
-    // construct output
-    char buf[64], *cbuf = buf, *end = buf+64;
-    for (int i = 0; i < nstates; i++)
-      cbuf += snprintf(cbuf, end - cbuf, ", %.1f%% %s", 100 * state_time[i] / period, state_names[i]);
-    primus_trace("profiling: %s: %.1f fps%s\n", name, nframes / period, buf);
-    // start counting again
-    print_timestamp = timestamp;
-    nframes = 0;
-    memset(state_time, 0, sizeof(double)*nstates);
-  }
-};
-
 // Runs before all other initialization takes place
 struct EarlyInitializer {
   EarlyInitializer()
@@ -142,7 +89,7 @@ struct EarlyInitializer {
     char c = 'C';
     send(sock, &c, 1, 0);
     recv(sock, &c, 1, 0);
-    assert(c == 'Y' && "bumblebeed failed");
+    die_if(c != 'Y', "failure contacting bumblebee daemon\n");
     // the socket will be closed when the application quits, then bumblebee will shut down the secondary X
 #else
 #warning Building without Bumblebee daemon support
@@ -160,6 +107,8 @@ static struct PrimusInfo {
   // Readback-display synchronization method
   // 0: no sync, 1: D lags behind one frame, 2: fully synced
   int sync;
+  // 0: only errors, 1: warnings, 2: profiling
+  int loglevel;
   // The "accelerating" X display
   Display *adpy;
   // The "displaying" X display. The same as the application is using, but
@@ -179,16 +128,17 @@ static struct PrimusInfo {
 
   PrimusInfo():
     sync(atoi(getconf(PRIMUS_SYNC))),
+    loglevel(atoi(getconf(PRIMUS_VERBOSE))),
     adpy(XOpenDisplay(getconf(PRIMUS_DISPLAY))),
     ddpy(XOpenDisplay(NULL)),
     needed_global(dlopen(getconf(PRIMUS_LOAD_GLOBAL), RTLD_LAZY | RTLD_GLOBAL)),
     afns(getconf(PRIMUS_libGLa)),
     dfns(getconf(PRIMUS_libGLd))
   {
-    assert(adpy && "failed to open secondary X display");
-    assert(needed_global && "failed to load PRIMUS_LOAD_GLOBAL");
-    if (afns.handle == dfns.handle && strcmp(getconf(PRIMUS_libGLa), getconf(PRIMUS_libGLd)))
-      primus_trace("warning: unexpectedly got same libGL for rendering and display\n");
+    die_if(!adpy, "failed to open secondary X display\n");
+    die_if(!needed_global, "failed to load PRIMUS_LOAD_GLOBAL\n");
+    die_if(afns.handle == dfns.handle && strcmp(getconf(PRIMUS_libGLa), getconf(PRIMUS_libGLd)),
+           "unexpectedly got same libGL for rendering and display\n");
   }
 } primus;
 
@@ -299,6 +249,63 @@ static __thread struct TSPrimusInfo {
   }
 } tsprimus;
 
+// Profiler
+class Profiler {
+  const char *name;
+  const char * const *state_names;
+  int nstates;
+
+  int state;
+  double *state_time;
+  double prev_timestamp, print_timestamp;
+  int nframes;
+public:
+  Profiler(const char *name, const char * const *state_names):
+    name(name),
+    state_names(state_names),
+    nstates(0), state(0), nframes(0)
+  {
+    while (state_names[nstates]) ++nstates; // count number of states
+    state_time = new double[nstates];
+    memset(state_time, 0, sizeof(double)*nstates);
+    // reset time data
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+    prev_timestamp = print_timestamp = timestamp;
+  }
+  ~Profiler()
+  {
+    delete [] state_time;
+  }
+  void tick(bool state_reset = false)
+  {
+    // update times
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+    if (state_reset)
+      state = 0;
+    state_time[state] += timestamp - prev_timestamp;
+    state = (state + 1) % nstates;
+    prev_timestamp = timestamp;
+    nframes += !!(state == 0);
+    // check if it's time to print again
+    double period = timestamp - print_timestamp; // time since we printed
+    if (state != 0 || period < 5)
+      return;
+    // construct output
+    char buf[64], *cbuf = buf, *end = buf+64;
+    for (int i = 0; i < nstates; i++)
+      cbuf += snprintf(cbuf, end - cbuf, ", %.1f%% %s", 100 * state_time[i] / period, state_names[i]);
+    primus_perf("%s: %.1f fps%s\n", name, nframes / period, buf);
+    // start counting again
+    print_timestamp = timestamp;
+    nframes = 0;
+    memset(state_time, 0, sizeof(double)*nstates);
+  }
+};
+
 void* TSPrimusInfo::D::work(void *vd)
 {
   struct D &d = *(D *)vd;
@@ -374,7 +381,7 @@ void* TSPrimusInfo::R::work(void *vr)
       if (!primus.sync && sem_timedwait(&r.pd->rsem, &tp))
       {
 	pthread_cancel(r.pd->worker);
-	primus_trace("warning: killed a worker to proceed\n");
+	primus_warn("killed a worker to proceed\n");
 	sem_post(&r.pd->rsem); // Pretend that D worker completed reinit
 	assert(!r.pbuffer);    // Cannot proceed without the buddy
       }
@@ -415,7 +422,7 @@ void* TSPrimusInfo::R::work(void *vr)
     clock_gettime(CLOCK_REALTIME, &tp);
     tp.tv_sec  += 1;
     if (!primus.sync && sem_timedwait(&r.pd->rsem, &tp))
-      primus_trace("warning: dropping a frame to avoid deadlock\n");
+      primus_warn("dropping a frame to avoid deadlock\n");
     else
     {
       r.pd->buf = pixeldata;
@@ -490,8 +497,8 @@ GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList
   primus.actx2dctx[actx] = dctx;
   primus.actx2rctx[actx] = rctx;
   primus.actx2fbconfig[actx] = *acfgs;
-  if (direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx))
-    primus_trace("warning: failed to acquire direct rendering context for display thread\n");
+  die_if(direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx),
+         "failed to acquire direct rendering context for display thread\n");
   return actx;
 }
 
@@ -520,8 +527,8 @@ GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType,
   primus.actx2dctx[actx] = dctx;
   primus.actx2rctx[actx] = rctx;
   primus.actx2fbconfig[actx] = config;
-  if (direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx))
-    primus_trace("warning: failed to acquire direct rendering context for display thread\n");
+  die_if(direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx),
+         "failed to acquire direct rendering context for display thread\n");
   return actx;
 }
 
@@ -597,7 +604,6 @@ static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di
   note_geometry(dpy, di.window, &w, &h);
   if (w == di.width && h == di.height)
     return;
-  primus_trace("recreating backing pbuffer for a resized drawable\n");
   di.width = w; di.height = h;
   primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
   int pbattrs[] = {GLX_PBUFFER_WIDTH, di.width, GLX_PBUFFER_HEIGHT, di.height, GLX_PRESERVED_CONTENTS, True, None};
@@ -706,7 +712,7 @@ void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned in
 
 void glXUseXFont(Font font, int first, int count, int list)
 {
-  primus_trace("sorry, not implemented: %s\n", __func__);
+  primus_sorry("%s\n", __func__);
   for (int i = 0; i < count; i++)
   {
     primus.afns.glNewList(list + i, GL_COMPILE);
