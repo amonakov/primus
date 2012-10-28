@@ -306,6 +306,7 @@ void* TSPrimusInfo::D::work(void *vd)
   GLXDrawable drawable;
   static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
   static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
+  GLuint quad_texture;
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
   for (;;)
@@ -316,6 +317,8 @@ void* TSPrimusInfo::D::work(void *vd)
     {
       d.reinit = false;
       width = d.width; height = d.height; drawable = d.drawable;
+      if (quad_texture)
+	primus.dfns.glDeleteTextures(1, &quad_texture);
       primus.dfns.glXMakeCurrent(primus.ddpy, drawable, d.context);
       if (!drawable)
       {
@@ -327,7 +330,6 @@ void* TSPrimusInfo::D::work(void *vd)
       primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
       primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
       primus.dfns.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-      GLuint quad_texture;
       primus.dfns.glGenTextures(1, &quad_texture);
       primus.dfns.glBindTexture(GL_TEXTURE_2D, quad_texture);
       primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -380,6 +382,7 @@ void* TSPrimusInfo::R::work(void *vr)
       {
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
+	primus.afns.glDeleteBuffers(2, &pbos[0]);
       }
       r.pd->reinit = true;
       sem_post(&r.pd->dsem); // Signal D worker to reinit
@@ -392,8 +395,7 @@ void* TSPrimusInfo::R::work(void *vr)
 	sem_post(&r.asem);
 	return NULL;
       }
-      if (!pbos[0])
-	primus.afns.glGenBuffers(2, &pbos[0]);
+      primus.afns.glGenBuffers(2, &pbos[0]);
       primus.afns.glReadBuffer(GL_BACK);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
