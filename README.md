@@ -24,7 +24,7 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
 (reflecting how `/usr/lib*` are named):
 
 * Arch needs `lib` and `lib32` as above
-* Gentoo needs `lib64` and `lib32`
+* Gentoo needs `lib64` and `lib32`, and adjusted `primusrun` (see comments)
 * RPM-based may need `lib64` and `lib`
 * Debian (with multiarch) needs `lib/x86_64-linux-gnu` and `lib/i386-linux-gnu`
 * Ubuntu (with multiarch) seems rather inconsistent.  The dynamic linker
@@ -39,6 +39,11 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
         LIBDIR=i386-linux-gnu CXX=g++\ -m32 make
         unset PRIMUS_libGLa
         unset PRIMUS_libGLd
+
+  Furthermore, like on Gentoo, `libnvidia-tls.so` is not present in default
+  shared library search directories. The following variant of adjustment is needed:
+
+        PRIMUS_libGL=${PRIMUS_libGL}:/usr/lib/nvidia-current:/usr/lib32/nvidia-current
 
 Issues under compositing WMs
 ----------------------------
