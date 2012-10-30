@@ -321,6 +321,14 @@ public:
   }
 };
 
+static int (*prevhandler)(Display *, XErrorEvent *);
+static int handler(Display *d , XErrorEvent *e)
+{
+  if (d != primus.ddpy)
+    return prevhandler(d, e);
+  return 0;
+}
+
 void* TSPrimusInfo::D::work(void *vd)
 {
   struct D &d = *(D *)vd;
@@ -341,12 +349,15 @@ void* TSPrimusInfo::D::work(void *vd)
       width = d.width; height = d.height; drawable = d.drawable;
       if (quad_texture)
 	primus.dfns.glDeleteTextures(1, &quad_texture);
+      if (prevhandler)
+	XSetErrorHandler(prevhandler);
       primus.dfns.glXMakeCurrent(primus.ddpy, drawable, d.context);
       if (!drawable)
       {
 	sem_post(&d.rsem);
 	return NULL;
       }
+      prevhandler = XSetErrorHandler(handler);
       primus.dfns.glViewport(0, 0, d.width, d.height);
       primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
       primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
