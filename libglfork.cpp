@@ -38,7 +38,7 @@ struct CapturedFns {
   {
     die_if(!lib || lib[0] != '/', "need absolute library path: %s\n", lib);
     handle = dlopen(lib, RTLD_LAZY);
-    die_if(!handle, "failed to load library %s\n", lib);
+    die_if(!handle, "failed to load library %s\n%s\n", lib, dlerror() );
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)dlsym(handle, #name);
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
