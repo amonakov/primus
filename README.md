@@ -15,6 +15,15 @@ A simple shell script, `primusrun`, is provided to help with testing.
 
 At the moment primus does not advertise any GLX extensions to the client.
 
+In distributions
+----------------
+
+* Arch: [primus-git](https://aur.archlinux.org/packages.php?ID=63239)
+  and [lib32-primus-git](https://aur.archlinux.org/packages.php?ID=63240)
+  in AUR
+* Gentoo: `primus-9999.ebuild` in the `bumblebee` overlay
+* Ubuntu: [primus PPA](https://launchpad.net/~zhurikhin/+archive/primus)
+
 Building for multilib (32-bit + 64-bit) systems
 -----------------------------------------------
 
