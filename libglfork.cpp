@@ -137,8 +137,6 @@ static struct PrimusInfo {
   {
     die_if(!adpy, "failed to open secondary X display\n");
     die_if(!needed_global, "failed to load PRIMUS_LOAD_GLOBAL\n");
-    die_if(afns.handle == dfns.handle && strcmp(getconf(PRIMUS_libGLa), getconf(PRIMUS_libGLd)),
-           "unexpectedly got same libGL for rendering and display\n");
   }
 } primus;
 
