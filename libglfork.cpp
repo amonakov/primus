@@ -350,7 +350,10 @@ void* TSPrimusInfo::D::work(void *vd)
       if (quad_texture)
 	primus.dfns.glDeleteTextures(1, &quad_texture);
       if (prevhandler)
+      {
+	XSync(primus.ddpy, true);
 	XSetErrorHandler(prevhandler);
+      }
       primus.dfns.glXMakeCurrent(primus.ddpy, drawable, d.context);
       if (!drawable)
       {
