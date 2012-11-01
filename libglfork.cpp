@@ -72,6 +72,11 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
   }
 };
 
+#define stringify(s) #s
+// Shorthand for obtaining compile-time configurable value that can be
+// overridden by environment
+#define getconf(V) (getenv(#V) ? getenv(#V) : stringify(V))
+
 // Runs before all other initialization takes place
 struct EarlyInitializer {
   EarlyInitializer()
@@ -82,7 +87,7 @@ struct EarlyInitializer {
     int sock = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, BUMBLEBEE_SOCKET);
+    strncpy(addr.sun_path, getconf(BUMBLEBEE_SOCKET), sizeof(addr.sun_path));
     connect(sock, (struct sockaddr *)&addr, sizeof(addr));
     if (errno)
       perror("connect");
@@ -96,10 +101,6 @@ struct EarlyInitializer {
 #endif
   }
 };
-
-// Shorthand for obtaining compile-time configurable value that can be
-// overridden by environment
-#define getconf(V) (getenv(#V) ? getenv(#V) : V)
 
 // Process-wide data
 static struct PrimusInfo {
