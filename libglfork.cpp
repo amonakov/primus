@@ -23,6 +23,24 @@
 #define primus_sorry(...) primus_print(primus.loglevel >= 1, "sorry, not implemented: " __VA_ARGS__)
 #define primus_perf(...) primus_print(primus.loglevel >= 2, "profiling: " __VA_ARGS__)
 
+// Try to load any of the colon-separated libraries
+static void *mdlopen(const char *paths, int flag)
+{
+  char *p = strdupa(paths);
+  char errors[1024], *errors_ptr = errors, *errors_end = errors + 1024;
+  for (char *c = p; c; p = c + 1)
+  {
+    if ((c = strchr(p, ':')))
+      *c = 0;
+    die_if(p[0] != '/', "need absolute library path: %s\n", p);
+    void *handle = dlopen(p, flag);
+    if (handle)
+      return handle;
+    errors_ptr += snprintf(errors_ptr, errors_end - errors_ptr, "%s\n", dlerror());
+  }
+  die_if(true, "failed to load any of the libraries: %s\n%s", paths, errors);
+}
+
 // Pointers to implemented/forwarded GLX and OpenGL functions
 struct CapturedFns {
   void *handle;
@@ -36,9 +54,7 @@ struct CapturedFns {
 #undef DEF_GLX_PROTO
   CapturedFns(const char *lib)
   {
-    die_if(!lib || lib[0] != '/', "need absolute library path: %s\n", lib);
-    handle = dlopen(lib, RTLD_LAZY);
-    die_if(!handle, "%s\n", dlerror());
+    handle = mdlopen(lib, RTLD_LAZY);
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)dlsym(handle, #name);
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
