@@ -8,12 +8,10 @@ VirtualGL.  It intercepts GLX calls and redirects GL rendering to a
 secondary X display, presumably driven by a faster GPU. On swapping
 buffers, rendered contents are read back using a PBO and copied onto
 the drawable it was supposed to be rendered on in the first place.
+For more information, refer to [technotes.md]
+(https://github.com/amonakov/primus/blob/master/technotes.md).
 
-Both original and shadow GL contexts can use direct rendering.
-
-A simple shell script, `primusrun`, is provided to help with testing.
-
-At the moment primus does not advertise any GLX extensions to the client.
+To use, install or build from source and use `primusrun` wrapper script.
 
 In distributions
 ----------------
@@ -68,12 +66,10 @@ This makes primus display the previously rendered frame. Alternatively,
 with `PRIMUS_SYNC=2` primus will display the latest rendered frame, trading
 frame rate for reduced visual latency.
 
-On benchmarking
----------------
+FAQ
+---
 
-Please note that VirtualGL does not really display all frames it
-gets from the offload slave.  By default, primus does render all frames
-it gets from the secondary server, except when the display thread
-locks up for longer than a second.
-
-For an interesting comparison, play around with `ipers` from mesa-demos.
+Q: Performance does not exceed 60 fps, I was getting more with optirun/VirtualGL.  
+A: This is the effect of vblank synchronisation. For benchmarking, you can use
+`vblank_mode=0 primusrun ...`, but in practice this will probably only waste power,
+as your LCD panel does not display more than 60 frames per second anyway.
