@@ -252,11 +252,11 @@ static __thread struct TSPrimusInfo {
       return;
     d.make_current(dpy, draw, read, actx);
     r.make_current(draw, actx, &d);
-    sem_post(&r.rsem); // Signal R worker, it will signal D worker
-    sem_wait(&r.asem); // Wait until R (and D) completed reinit
     if (!draw || !actx)
     {
       assert(!draw && !actx);
+      sem_post(&r.rsem); // Signal R worker, it will signal D worker
+      sem_wait(&r.asem); // Wait until R (and D) completed reinit
       // As asem was posted, R::work and D::work are terminating after seeing NULL context
       d.reap_worker();
       r.reap_worker();
@@ -357,8 +357,6 @@ void* TSPrimusInfo::D::work(void *vd)
       primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
       primus.dfns.glEnable(GL_TEXTURE_2D);
-      sem_post(&d.rsem);
-      continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
     if (!primus.sync)
@@ -407,24 +405,22 @@ void* TSPrimusInfo::R::work(void *vr)
 	primus.afns.glDeleteBuffers(2, &pbos[0]);
       }
       r.pd->reinit = true;
-      sem_post(&r.pd->dsem); // Signal D worker to reinit
-      sem_wait(&r.pd->rsem); // Wait until reinit was completed
-      if (!primus.sync)
-	sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
       if (!r.pbuffer)
       {
+	sem_post(&r.pd->dsem); // Signal D worker to reinit
+	sem_wait(&r.pd->rsem); // Wait until reinit was completed
 	sem_post(&r.asem);
 	return NULL;
       }
+      if (!primus.sync)
+	sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
       primus.afns.glGenBuffers(2, &pbos[0]);
       primus.afns.glReadBuffer(GL_BACK);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
-      sem_post(&r.asem);
-      continue;
     }
     primus.afns.glWaitSync(r.sync, 0, GL_TIMEOUT_IGNORED);
     primus.afns.glReadPixels(0, 0, r.width, r.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
