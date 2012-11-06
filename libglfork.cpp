@@ -357,6 +357,8 @@ void* TSPrimusInfo::D::work(void *vd)
       primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
       primus.dfns.glEnable(GL_TEXTURE_2D);
+      sem_post(&d.rsem);
+      continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
     if (!primus.sync)
@@ -405,16 +407,16 @@ void* TSPrimusInfo::R::work(void *vr)
 	primus.afns.glDeleteBuffers(2, &pbos[0]);
       }
       r.pd->reinit = true;
+      sem_post(&r.pd->dsem); // Signal D worker to reinit
+      sem_wait(&r.pd->rsem); // Wait until reinit was completed
+      if (!primus.sync)
+	sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
       primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
       if (!r.pbuffer)
       {
-	sem_post(&r.pd->dsem); // Signal D worker to reinit
-	sem_wait(&r.pd->rsem); // Wait until reinit was completed
 	sem_post(&r.asem);
 	return NULL;
       }
-      if (!primus.sync)
-	sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
       primus.afns.glGenBuffers(2, &pbos[0]);
       primus.afns.glReadBuffer(GL_BACK);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
