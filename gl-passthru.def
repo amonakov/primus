@@ -504,7 +504,11 @@ DEF_GLX_PROTO(void, glGetShaderiv, (GLuint shader, GLenum pname, GLint *params),
 DEF_GLX_PROTO(GLint, glGetUniformLocation, (GLuint program, const GLchar *name), program, name)
 DEF_GLX_PROTO(void, glLinkProgram, (GLuint program), program)
 //DEF_GLX_PROTO(GLvoid*, glMapBuffer, (GLenum target, GLenum access), target, access)
-DEF_GLX_PROTO(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar* *string, const GLint *length), shader, count, string, length)
+#if GL_GLEXT_VERSION < 81
+	DEF_GLX_PROTO(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar* *string, const GLint *length), shader, count, string, length)
+#else
+	DEF_GLX_PROTO(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar* const *string, const GLint *length), shader, count, string, length)	
+#endif
 DEF_GLX_PROTO(void, glUniform1f, (GLint location, GLfloat v0), location, v0)
 DEF_GLX_PROTO(void, glUniform1i, (GLint location, GLint v0), location, v0)
 DEF_GLX_PROTO(void, glUniform2f, (GLint location, GLfloat v0, GLfloat v1), location, v0, v1)
