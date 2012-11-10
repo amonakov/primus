@@ -1,6 +1,8 @@
 CXX      ?= g++
 CXXFLAGS ?= -Wall -g
 
+CXXFLAGS += -Werror=missing-declarations
+
 # On multilib systems, this needs to point to distribution-specific library
 # subdir like in /usr (lib or lib64 for 64-bit, lib32 or lib for 32-bit)
 LIBDIR   ?= lib
