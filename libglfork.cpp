@@ -328,7 +328,7 @@ void* TSPrimusInfo::D::work(void *vd)
   GLXDrawable drawable;
   static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
   static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
-  GLuint quad_texture;
+  GLuint quad_texture = 0;
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
   for (;;)
