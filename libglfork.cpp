@@ -55,7 +55,9 @@ struct CapturedFns {
   CapturedFns(const char *lib)
   {
     handle = mdlopen(lib, RTLD_LAZY);
-#define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)dlsym(handle, #name);
+    typedef void* (*dlsym_fn)(void *, const char*);
+    dlsym_fn real_dlsym = (dlsym_fn) dlsym(dlopen("libdl.so.2", RTLD_LAZY), "dlsym");
+#define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)real_dlsym(handle, #name);
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
 #undef DEF_GLX_PROTO
