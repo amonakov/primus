@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cassert>
 #include <map>
+#include <X11/Xatom.h>
 #pragma GCC visibility push(default)
 #define GLX_GLXEXT_PROTOTYPES
 #define GL_GLEXT_PROTOTYPES
@@ -20,7 +21,6 @@
 
 #define die_if(cond, ...)  do {if (cond) {primus_print(true, "fatal: " __VA_ARGS__); exit(1);} } while (0)
 #define primus_warn(...) primus_print(primus.loglevel >= 1, "warning: " __VA_ARGS__)
-#define primus_sorry(...) primus_print(primus.loglevel >= 1, "sorry, not implemented: " __VA_ARGS__)
 #define primus_perf(...) primus_print(primus.loglevel >= 2, "profiling: " __VA_ARGS__)
 
 // Try to load any of the colon-separated libraries
@@ -727,12 +727,15 @@ void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned in
 
 void glXUseXFont(Font font, int first, int count, int list)
 {
-  primus_sorry("%s\n", __func__);
-  for (int i = 0; i < count; i++)
-  {
-    primus.afns.glNewList(list + i, GL_COMPILE);
-    primus.afns.glEndList();
-  }
+  unsigned long prop;
+  XFontStruct *fs = XQueryFont(primus.ddpy, font);
+  XGetFontProperty(fs, XA_FONT, &prop);
+  char *xlfd = XGetAtomName(primus.ddpy, prop);
+  Font afont = XLoadFont(primus.adpy, xlfd);
+  primus.afns.glXUseXFont(afont, first, count, list);
+  XUnloadFont(primus.adpy, afont);
+  XFree(xlfd);
+  XFreeFontInfo(NULL, fs, 1);
 }
 
 GLXContext glXGetCurrentContext(void)
