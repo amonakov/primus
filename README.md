@@ -47,6 +47,9 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
         unset PRIMUS_libGLa
         unset PRIMUS_libGLd
 
+  Starting from 13.04, Ubuntu needs the same `LIBDIR` paths as Debian (with
+  leading `lib/`); consequently, `lib/` in `PRIMUS_libGLd` should be omitted.
+
   Furthermore, like on Gentoo, `libnvidia-tls.so` is not present in default
   shared library search directories. The following variant of adjustment is needed:
 
