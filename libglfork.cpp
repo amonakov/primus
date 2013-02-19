@@ -836,14 +836,14 @@ const char *glXGetClientString(Display *dpy, int name)
   {
     case GLX_VENDOR: return "primus";
     case GLX_VERSION: return "1.4";
-    case GLX_EXTENSIONS: return "GLX_ARB_get_proc_address";
+    case GLX_EXTENSIONS: return "GLX_ARB_get_proc_address ";
     default: return NULL;
   }
 }
 
 const char *glXQueryExtensionsString(Display *dpy, int screen)
 {
-  return "GLX_ARB_get_proc_address";
+  return "GLX_ARB_get_proc_address ";
 }
 
 // OpenGL ABI specifies that anything above OpenGL 1.2 + ARB_multitexture must
