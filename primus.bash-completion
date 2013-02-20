@@ -1,0 +1,22 @@
+# bash-completion profile for primusrun
+
+_primusrun() {
+    local i prev cur last_primusrun_offset
+
+    # the position of the last primusrun arguments part
+    last_primusrun_offset=0
+
+    for (( i=1; i<=COMP_CWORD; i++ )); do
+        prev="${COMP_WORDS[i-1]}"
+        cur="${COMP_WORDS[i]}"
+
+        [[ "$cur" != -* ]] && break
+
+        last_primusrun_offset=$i
+    done
+
+    # after the options, auto-complete command
+    _command_offset $i
+}
+
+have primusrun && complete -F _primusrun primusrun
