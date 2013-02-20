@@ -5,7 +5,6 @@ DEF_GLX_PROTO(Bool,         glXQueryVersion,          (Display *dpy, int *maj, i
 DEF_GLX_PROTO(Bool,         glXIsDirect,              (Display *dpy, GLXContext ctx),ctx)
 DEF_GLX_PROTO(const char*,  glXQueryServerString,     (Display *dpy, int screen, int name),screen,name)
 DEF_GLX_PROTO(GLXFBConfig*, glXChooseFBConfig,        (Display *dpy, int screen, const int *attribList, int *nitems),screen,attribList,nitems)
-DEF_GLX_PROTO(int,          glXGetFBConfigAttrib,     (Display *dpy, GLXFBConfig config, int attribute, int *value),config,attribute,value)
 DEF_GLX_PROTO(GLXFBConfig*, glXGetFBConfigs,          (Display *dpy, int screen, int *nelements),screen,nelements)
 DEF_GLX_PROTO(int,          glXQueryContext,          (Display *dpy, GLXContext ctx, int attribute, int *value),ctx,attribute,value)
 DEF_GLX_PROTO(void,         glXSelectEvent,           (Display *dpy, GLXDrawable drawable, unsigned long mask),drawable,mask)

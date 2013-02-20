@@ -719,6 +719,13 @@ XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
   return primus.dfns.glXGetVisualFromFBConfig(dpy, get_dpy_fbc(dpy, config));
 }
 
+int glXGetFBConfigAttrib(Display *dpy, GLXFBConfig config, int attribute, int *value)
+{
+  if (attribute == GLX_VISUAL_ID)
+    return primus.dfns.glXGetFBConfigAttrib(dpy, get_dpy_fbc(dpy, config), attribute, value);
+  return primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attribute, value);
+}
+
 void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned int *value)
 {
   assert(primus.drawables.known(draw));
