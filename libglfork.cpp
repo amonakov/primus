@@ -81,6 +81,44 @@ struct DrawableInfo {
   GLXPbuffer  pbuffer;
   Drawable window;
   int width, height;
+  GLvoid *pixeldata;
+  GLsync sync;
+  GLXContext actx;
+
+  struct {
+    pthread_t worker;
+    sem_t acqsem, relsem;
+    bool reinit;
+
+    void spawn_worker(GLXDrawable draw, void* (*work)(void*))
+    {
+      reinit = true;
+      sem_init(&acqsem, 0, 0);
+      sem_init(&relsem, 0, 0);
+      pthread_create(&worker, NULL, work, (void*)draw);
+    }
+    void reap_worker()
+    {
+      //pthread_cancel(worker);
+      pthread_join(worker, NULL);
+      sem_destroy(&relsem);
+      sem_destroy(&acqsem);
+      worker = 0;
+    }
+  } r, d;
+  void reap_workers()
+  {
+    if (r.worker)
+    {
+      width = -1;
+      r.reinit = true;
+      sem_post(&r.acqsem);
+      sem_wait(&r.relsem);
+      r.reap_worker();
+      d.reap_worker();
+    }
+  }
+  ~DrawableInfo();
 };
 
 struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
@@ -142,8 +180,6 @@ static struct PrimusInfo {
   DrawablesInfo drawables;
   // FIXME: there are race conditions in accesses to these
   std::map<GLXContext, GLXFBConfig> actx2fbconfig;
-  std::map<GLXContext, GLXContext> actx2dctx;
-  std::map<GLXContext, GLXContext> actx2rctx;
 
   PrimusInfo():
     sync(atoi(getconf(PRIMUS_SYNC))),
@@ -160,111 +196,16 @@ static struct PrimusInfo {
 } primus;
 
 // Thread-specific data
-// For each thread that called glXMakeCurrent, primus spawns two additional
-// threads: the readback task, and the display task.
-static __thread struct TSPrimusInfo {
-
-  // Pertaining to the display task
-  struct D {
-    static void* work(void *vd);
-    pthread_t worker;
-    // D worker waits on dsem to reinit or draw the buffer given to it
-    // R worker waits on rsem to unmap the PBO being drawn from
-    sem_t dsem, rsem;
-    int width, height;
-    GLvoid *buf;
-    Display *dpy;
-    GLXDrawable drawable, read_drawable;
-    GLXContext context;
-    bool reinit;
-
-    void spawn_worker()
-    {
-      sem_init(&dsem, 0, 0);
-      sem_init(&rsem, 0, 0);
-      pthread_create(&worker, NULL, work, (void*)this);
-    }
-    void reap_worker()
-    {
-      pthread_join(worker, NULL);
-      sem_destroy(&dsem);
-      sem_destroy(&rsem);
-      worker = 0;
-    }
-
-    void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
-    {
-      if (!worker)
-	spawn_worker();
-      // D worker saves drawable, width, height in local vars upon reinit
-      this->dpy = dpy;
-      this->drawable = draw;
-      this->read_drawable = read;
-      this->context = actx ? primus.actx2dctx[actx] : NULL;
-      this->width  = draw ? primus.drawables[draw].width  : 0;
-      this->height = draw ? primus.drawables[draw].height : 0;
-    }
-  } d;
-
-  // Pertaining to the readback task
-  struct R {
-    static void* work(void *vr);
-    pthread_t worker;
-    // The application thread waits on asem to swap buffers
-    // R worker waits on rsem to start frame readback
-    sem_t asem, rsem;
-    int width, height;
-    GLXDrawable pbuffer;
-    GLXContext context;
-    // Pointer to the corresponding display task descriptor
-    D *pd;
-    bool reinit;
-    GLsync sync;
-
-    void spawn_worker()
-    {
-      sem_init(&asem, 0, 0);
-      sem_init(&rsem, 0, 0);
-      pthread_create(&worker, NULL, work, (void*)this);
-    }
-    void reap_worker()
-    {
-      pthread_join(worker, NULL);
-      sem_destroy(&asem);
-      sem_destroy(&rsem);
-      worker = 0;
-    }
-
-    void make_current(GLXDrawable draw, GLXContext actx, D *pd)
-    {
-      if (!worker)
-	spawn_worker();
-      // R::work accesses these only prior to signaling asem
-      this->pbuffer = draw ? primus.drawables[draw].pbuffer : 0;
-      this->context = actx ? primus.actx2rctx[actx] : NULL;
-      this->width   = draw ? primus.drawables[draw].width  : 0;
-      this->height  = draw ? primus.drawables[draw].height : 0;
-      this->pd      = pd;
-      this->reinit  = true;
-    }
-  } r;
-  void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext actx)
+static __thread struct {
+  Display *dpy;
+  GLXDrawable drawable, read_drawable;
+  void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read)
   {
-    if (draw && primus.drawables[draw].kind == DrawableInfo::Pbuffer)
-      return;
-    d.make_current(dpy, draw, read, actx);
-    r.make_current(draw, actx, &d);
-    if (!draw || !actx)
-    {
-      assert(!draw && !actx);
-      sem_post(&r.rsem); // Signal R worker, it will signal D worker
-      sem_wait(&r.asem); // Wait until R (and D) completed reinit
-      // As asem was posted, R::work and D::work are terminating after seeing NULL context
-      d.reap_worker();
-      r.reap_worker();
-    }
+    this->dpy = dpy;
+    this->drawable = draw;
+    this->read_drawable = read;
   }
-} tsprimus;
+} tsdata;
 
 // Profiler
 class Profiler {
@@ -323,129 +264,141 @@ public:
   }
 };
 
-void* TSPrimusInfo::D::work(void *vd)
+static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg);
+
+static void* display_work(void *vd)
 {
-  struct D &d = *(D *)vd;
+  GLXDrawable drawable = (GLXDrawable)vd;
+  DrawableInfo &di = primus.drawables[drawable];
   int width, height;
-  GLXDrawable drawable;
   static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
   static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
   GLuint quad_texture = 0;
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
+  GLXContext context = primus.dfns.glXCreateNewContext(primus.ddpy, get_dpy_fbc(primus.ddpy, di.fbconfig), GLX_RGBA_TYPE, NULL, True);
+  die_if(!primus.dfns.glXIsDirect(primus.ddpy, context),
+	 "failed to acquire direct rendering context for display thread\n");
+  primus.dfns.glXMakeCurrent(primus.ddpy, drawable, context);
+  primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
+  primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
+  primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
+  primus.dfns.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+  primus.dfns.glGenTextures(1, &quad_texture);
+  primus.dfns.glBindTexture(GL_TEXTURE_2D, quad_texture);
+  primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  primus.dfns.glEnable(GL_TEXTURE_2D);
   for (;;)
   {
-    sem_wait(&d.dsem);
+    sem_wait(&di.d.acqsem);
     profiler.tick(true);
-    if (d.reinit)
+    if (di.d.reinit)
     {
-      d.reinit = false;
-      width = d.width; height = d.height; drawable = d.drawable;
-      if (quad_texture)
-	primus.dfns.glDeleteTextures(1, &quad_texture);
-      primus.dfns.glXMakeCurrent(primus.ddpy, drawable, d.context);
-      if (!drawable)
+      di.d.reinit = false;
+      width = di.width; height = di.height;
+      if (width == -1)
       {
-	sem_post(&d.rsem);
+	primus.dfns.glDeleteTextures(1, &quad_texture);
+	primus.dfns.glXMakeCurrent(primus.ddpy, 0, NULL);
+	primus.dfns.glXDestroyContext(primus.ddpy, context);
+	sem_post(&di.d.relsem);
 	return NULL;
       }
-      primus.dfns.glViewport(0, 0, d.width, d.height);
-      primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
-      primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
-      primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
-      primus.dfns.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-      primus.dfns.glGenTextures(1, &quad_texture);
-      primus.dfns.glBindTexture(GL_TEXTURE_2D, quad_texture);
-      primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      primus.dfns.glViewport(0, 0, width, height);
       primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
-      primus.dfns.glEnable(GL_TEXTURE_2D);
-      sem_post(&d.rsem);
+      sem_post(&di.d.relsem);
       continue;
     }
-    primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, d.buf);
+    primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, di.pixeldata);
     if (!primus.sync)
-      sem_post(&d.rsem); // Unlock as soon as possible
+      sem_post(&di.d.relsem); // Unlock as soon as possible
     profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     primus.dfns.glXSwapBuffers(primus.ddpy, drawable);
     if (primus.sync)
-      sem_post(&d.rsem); // Unlock only after drawing
+      sem_post(&di.d.relsem); // Unlock only after drawing
     profiler.tick();
   }
   return NULL;
 }
 
-void* TSPrimusInfo::R::work(void *vr)
+static void* readback_work(void *vd)
 {
+  GLXDrawable drawable = (GLXDrawable)vd;
+  DrawableInfo &di = primus.drawables[drawable];
+  int width, height;
   GLuint pbos[2] = {0};
   int cbuf = 0;
-  struct R &r = *(R *)vr;
   static const char *state_names[] = {"app", "map", "wait", NULL};
   Profiler profiler("readback", state_names);
   struct timespec tp;
   if (!primus.sync)
-    sem_post(&r.pd->rsem); // No PBO is mapped initially
+    sem_post(&di.d.relsem); // No PBO is mapped initially
+  GLXContext context = primus.afns.glXCreateNewContext(primus.adpy, di.fbconfig, GLX_RGBA_TYPE, di.actx, True);
+  die_if(!primus.afns.glXIsDirect(primus.adpy, context),
+	 "failed to acquire direct rendering context for readback thread\n");
+  primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, context);
+  primus.afns.glGenBuffers(2, &pbos[0]);
+  primus.afns.glReadBuffer(GL_BACK);
   for (;;)
   {
-    sem_wait(&r.rsem);
+    sem_wait(&di.r.acqsem);
     profiler.tick(true);
-    if (r.reinit)
+    if (di.r.reinit)
     {
-      r.reinit = false;
+      di.r.reinit = false;
+      width = di.width; height = di.height;
       clock_gettime(CLOCK_REALTIME, &tp);
       tp.tv_sec  += 1;
       // Wait for D worker, if active
-      if (!primus.sync && sem_timedwait(&r.pd->rsem, &tp))
+      if (!primus.sync && sem_timedwait(&di.d.relsem, &tp))
       {
-	pthread_cancel(r.pd->worker);
+	pthread_cancel(di.d.worker);
 	primus_warn("killed a worker to proceed\n");
-	sem_post(&r.pd->rsem); // Pretend that D worker completed reinit
-	assert(!r.pbuffer);    // Cannot proceed without the buddy
+	sem_post(&di.d.relsem); // Pretend that D worker completed reinit
+	assert(width == -1);    // Cannot proceed without the buddy
       }
-      if (pbos[0])
+      di.d.reinit = true;
+      sem_post(&di.d.acqsem); // Signal D worker to reinit
+      sem_wait(&di.d.relsem); // Wait until reinit was completed
+      if (!primus.sync)
+	sem_post(&di.d.relsem); // Unlock as no PBO is currently mapped
+      if (width == -1)
       {
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
 	primus.afns.glDeleteBuffers(2, &pbos[0]);
-      }
-      r.pd->reinit = true;
-      sem_post(&r.pd->dsem); // Signal D worker to reinit
-      sem_wait(&r.pd->rsem); // Wait until reinit was completed
-      if (!primus.sync)
-	sem_post(&r.pd->rsem); // Unlock as no PBO is currently mapped
-      primus.afns.glXMakeCurrent(primus.adpy, r.pbuffer, r.context);
-      if (!r.pbuffer)
-      {
-	sem_post(&r.asem);
+	primus.afns.glXMakeCurrent(primus.adpy, 0, NULL);
+	primus.afns.glXDestroyContext(primus.adpy, context);
+	sem_post(&di.r.relsem);
 	return NULL;
       }
-      primus.afns.glGenBuffers(2, &pbos[0]);
-      primus.afns.glReadBuffer(GL_BACK);
+      primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, context);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
-      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
+      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
-      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, r.width*r.height*4, NULL, GL_STREAM_READ);
+      primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
     }
-    primus.afns.glWaitSync(r.sync, 0, GL_TIMEOUT_IGNORED);
-    primus.afns.glReadPixels(0, 0, r.width, r.height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+    primus.afns.glWaitSync(di.sync, 0, GL_TIMEOUT_IGNORED);
+    primus.afns.glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
     if (!primus.sync)
-      sem_post(&r.asem); // Unblock main thread as soon as possible
+      sem_post(&di.r.relsem); // Unblock main thread as soon as possible
     if (primus.sync == 1) // Get the previous framebuffer
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
     profiler.tick();
     clock_gettime(CLOCK_REALTIME, &tp);
     tp.tv_sec  += 1;
-    if (!primus.sync && sem_timedwait(&r.pd->rsem, &tp))
+    if (!primus.sync && sem_timedwait(&di.d.relsem, &tp))
       primus_warn("dropping a frame to avoid deadlock\n");
     else
     {
-      r.pd->buf = pixeldata;
-      sem_post(&r.pd->dsem);
+      di.pixeldata = pixeldata;
+      sem_post(&di.d.acqsem);
       if (primus.sync)
       {
-	sem_wait(&r.pd->rsem);
-	sem_post(&r.asem); // Unblock main thread only after D::work has completed
+	sem_wait(&di.d.relsem);
+	sem_post(&di.r.relsem); // Unblock main thread only after D::work has completed
       }
       cbuf ^= 1;
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf]);
@@ -457,7 +410,7 @@ void* TSPrimusInfo::R::work(void *vr)
 }
 
 // Find appropriate FBConfigs on both adpy and ddpy for a given Visual
-static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs, GLXFBConfig **dcfgs)
+static GLXFBConfig* match_fbconfig(Display *dpy, XVisualInfo *vis)
 {
   int acfgattrs[] = {
     GLX_DRAWABLE_TYPE,	GLX_WINDOW_BIT,
@@ -496,24 +449,14 @@ static void match_fbconfigs(Display *dpy, XVisualInfo *vis, GLXFBConfig **acfgs,
   glXGetConfig(dpy, vis, GLX_SAMPLES,        &acfgattrs[33]);
   //assert(acfgattrs[5] && !acfgattrs[7]);
   int ncfg;
-  *acfgs = primus.afns.glXChooseFBConfig(primus.adpy, 0, acfgattrs, &ncfg);
-  assert(ncfg);
-  *dcfgs = primus.dfns.glXChooseFBConfig(dpy, 0, acfgattrs, &ncfg);
-  assert(ncfg);
+  return primus.afns.glXChooseFBConfig(primus.adpy, 0, acfgattrs, &ncfg);
 }
 
 GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList, Bool direct)
 {
-  GLXFBConfig *acfgs, *dcfgs;
-  match_fbconfigs(dpy, vis, &acfgs, &dcfgs);
-  GLXContext dctx = primus.dfns.glXCreateNewContext(primus.ddpy, *dcfgs, GLX_RGBA_TYPE, NULL, direct);
+  GLXFBConfig *acfgs = match_fbconfig(dpy, vis);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, shareList, direct);
-  GLXContext rctx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, actx, direct);
-  primus.actx2dctx[actx] = dctx;
-  primus.actx2rctx[actx] = rctx;
   primus.actx2fbconfig[actx] = *acfgs;
-  die_if(direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx),
-         "failed to acquire direct rendering context for display thread\n");
   return actx;
 }
 
@@ -536,26 +479,19 @@ static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg)
 
 GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType, GLXContext shareList, Bool direct)
 {
-  GLXContext dctx = primus.dfns.glXCreateNewContext(primus.ddpy, get_dpy_fbc(dpy, config), renderType, NULL, direct);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, shareList, direct);
-  GLXContext rctx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, actx, direct);
-  primus.actx2dctx[actx] = dctx;
-  primus.actx2rctx[actx] = rctx;
   primus.actx2fbconfig[actx] = config;
-  die_if(direct && !primus.dfns.glXIsDirect(primus.ddpy, dctx),
-         "failed to acquire direct rendering context for display thread\n");
   return actx;
 }
 
 void glXDestroyContext(Display *dpy, GLXContext ctx)
 {
-  GLXContext dctx = primus.actx2dctx[ctx];
-  GLXContext rctx = primus.actx2rctx[ctx];
-  primus.actx2dctx.erase(ctx);
-  primus.actx2rctx.erase(ctx);
   primus.actx2fbconfig.erase(ctx);
-  primus.dfns.glXDestroyContext(primus.ddpy, dctx);
-  primus.afns.glXDestroyContext(primus.adpy, rctx);
+  // kludge: reap background tasks when deleting the last context
+  // otherwise something will deadlock during unloading the library
+  if (primus.actx2fbconfig.empty())
+    for (DrawablesInfo::iterator i = primus.drawables.begin(); i != primus.drawables.end(); i++)
+      i->second.reap_workers();
   primus.afns.glXDestroyContext(primus.adpy, ctx);
 }
 
@@ -586,19 +522,18 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
     di.window = draw;
     note_geometry(dpy, draw, &di.width, &di.height);
   }
-  GLXPbuffer &pbuffer = di.pbuffer;
-  if (!pbuffer)
+  if (!di.pbuffer)
   {
     int pbattrs[] = {GLX_PBUFFER_WIDTH, di.width, GLX_PBUFFER_HEIGHT, di.height, GLX_PRESERVED_CONTENTS, True, None};
-    pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, di.fbconfig, pbattrs);
+    di.pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, di.fbconfig, pbattrs);
   }
-  return pbuffer;
+  return di.pbuffer;
 }
 
 Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
 {
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
-  tsprimus.make_current(dpy, drawable, drawable, ctx);
+  tsdata.make_current(dpy, drawable, drawable);
   return primus.afns.glXMakeCurrent(primus.adpy, pbuffer, ctx);
 }
 
@@ -607,7 +542,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
   if (draw == read)
     return glXMakeCurrent(dpy, draw, ctx);
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
-  tsprimus.make_current(dpy, draw, read, ctx);
+  tsdata.make_current(dpy, draw, read);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
@@ -625,7 +560,7 @@ static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di
   di.pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, di.fbconfig, pbattrs);
   GLXContext actx = glXGetCurrentContext();
   primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, actx);
-  tsprimus.make_current(dpy, drawable, drawable, actx);
+  di.r.reinit = true;
 }
 
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
@@ -636,11 +571,20 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   if (di.kind == di.XWindow || di.kind == di.Window)
     update_geometry(dpy, drawable, di);
+  if (!di.r.worker)
+  {
+    // Need to create a sharing context to use GL sync objects
+    di.actx = glXGetCurrentContext();
+    die_if(!di.actx, "no current context at glXSwapBuffers\n");
+    di.d.spawn_worker(drawable, display_work);
+    di.r.spawn_worker(drawable, readback_work);
+  }
+  die_if(di.actx != glXGetCurrentContext(), "unexpected context at glXSwapBuffers\n");
   // Readback thread needs a sync object to avoid reading an incomplete frame
-  tsprimus.r.sync = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-  sem_post(&tsprimus.r.rsem); // Signal the readback worker thread
-  sem_wait(&tsprimus.r.asem); // Wait until it has issued glReadBuffer
-  primus.afns.glDeleteSync(tsprimus.r.sync);
+  di.sync = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  sem_post(&di.r.acqsem); // Signal the readback worker thread
+  sem_wait(&di.r.relsem); // Wait until it has issued glReadBuffer
+  primus.afns.glDeleteSync(di.sync);
   primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
 }
 
@@ -655,12 +599,18 @@ GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const in
   return glxwin;
 }
 
+DrawableInfo::~DrawableInfo()
+{
+  reap_workers();
+  if (pbuffer)
+    primus.afns.glXDestroyPbuffer(primus.adpy, pbuffer);
+}
+
 void glXDestroyWindow(Display *dpy, GLXWindow window)
 {
-  primus.dfns.glXDestroyWindow(primus.ddpy, window);
-  if (primus.drawables[window].pbuffer)
-    primus.afns.glXDestroyPbuffer(primus.adpy, primus.drawables[window].pbuffer);
+  assert(primus.drawables.known(window));
   primus.drawables.erase(window);
+  primus.dfns.glXDestroyWindow(primus.ddpy, window);
 }
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
@@ -691,10 +641,9 @@ GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const
 
 void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
 {
-  primus.dfns.glXDestroyPixmap(dpy, pixmap);
-  if (primus.drawables[pixmap].pbuffer)
-    primus.afns.glXDestroyPbuffer(primus.adpy, primus.drawables[pixmap].pbuffer);
+  assert(primus.drawables.known(pixmap));
   primus.drawables.erase(pixmap);
+  primus.dfns.glXDestroyPixmap(dpy, pixmap);
 }
 
 GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
@@ -703,8 +652,7 @@ GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   note_geometry(dpy, pixmap, &di.width, &di.height);
-  GLXFBConfig *acfgs, *dcfgs;
-  match_fbconfigs(dpy, visual, &acfgs, &dcfgs);
+  GLXFBConfig *acfgs = match_fbconfig(dpy, visual);
   di.fbconfig = *acfgs;
   return glxpix;
 }
@@ -752,7 +700,7 @@ GLXContext glXGetCurrentContext(void)
 
 GLXDrawable glXGetCurrentDrawable(void)
 {
-  return tsprimus.d.drawable;
+  return tsdata.drawable;
 }
 
 void glXWaitGL(void)
@@ -765,12 +713,12 @@ void glXWaitX(void)
 
 Display *glXGetCurrentDisplay(void)
 {
-  return tsprimus.d.dpy;
+  return tsdata.dpy;
 }
 
 GLXDrawable glXGetCurrentReadDrawable(void)
 {
-  return tsprimus.d.read_drawable;
+  return tsdata.read_drawable;
 }
 
 // Application sees ddpy-side Visuals, but adpy-side FBConfigs and Contexts
