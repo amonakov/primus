@@ -41,6 +41,13 @@ static void *mdlopen(const char *paths, int flag)
   die_if(true, "failed to load any of the libraries: %s\n%s", paths, errors);
 }
 
+static void *real_dlsym(void *handle, const char *symbol)
+{
+  typedef void* (*dlsym_fn)(void *, const char*);
+  static dlsym_fn pdlsym = (dlsym_fn) dlsym(RTLD_DEFAULT, "dlsym");
+  return pdlsym(handle, symbol);
+}
+
 // Pointers to implemented/forwarded GLX and OpenGL functions
 struct CapturedFns {
   void *handle;
@@ -55,8 +62,6 @@ struct CapturedFns {
   CapturedFns(const char *lib)
   {
     handle = mdlopen(lib, RTLD_LAZY);
-    typedef void* (*dlsym_fn)(void *, const char*);
-    dlsym_fn real_dlsym = (dlsym_fn) dlsym(dlopen("libdl.so.2", RTLD_LAZY), "dlsym");
 #define DEF_GLX_PROTO(ret, name, args, ...) name = (ret (*) args)real_dlsym(handle, #name);
 #include "glx-reimpl.def"
 #include "glx-dpyredir.def"
@@ -811,4 +816,12 @@ const char *glXQueryExtensionsString(Display *dpy, int screen)
 // extension functions, and Mesa and vendor libraries let them
 #ifndef PRIMUS_STRICT
 #warning Enabled workarounds for applications demanding more than promised by the OpenGL ABI
+
+// OpenGL extension forwarders
+#define P(name) \
+void ifunc_##name(void) asm(#name) __attribute__((visibility("default"),ifunc("i" #name))); \
+extern "C" { static void *i##name(void) \
+{ return primus.afns.handle ? real_dlsym(primus.afns.handle, #name) : NULL; } }
+#include "glext-passthru.def"
+#undef P
 #endif
