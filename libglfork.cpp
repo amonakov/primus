@@ -569,17 +569,22 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
+  if (di.r.worker && di.actx != glXGetCurrentContext())
+  {
+    primus_warn("glXSwapBuffers: respawning threads after context change\n");
+    di.reap_workers();
+  }
   if (di.kind == di.XWindow || di.kind == di.Window)
     update_geometry(dpy, drawable, di);
   if (!di.r.worker)
   {
     // Need to create a sharing context to use GL sync objects
     di.actx = glXGetCurrentContext();
-    die_if(!di.actx, "no current context at glXSwapBuffers\n");
+    if (!di.actx)
+      primus_warn("glXSwapBuffers: no current context\n");
     di.d.spawn_worker(drawable, display_work);
     di.r.spawn_worker(drawable, readback_work);
   }
-  die_if(di.actx != glXGetCurrentContext(), "unexpected context at glXSwapBuffers\n");
   // Readback thread needs a sync object to avoid reading an incomplete frame
   di.sync = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
   sem_post(&di.r.acqsem); // Signal the readback worker thread
