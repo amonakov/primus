@@ -510,6 +510,12 @@ static void note_geometry(Display *dpy, Drawable draw, int *width, int *height)
   XGetGeometry(dpy, draw, &root, &x, &y, (unsigned *)width, (unsigned *)height, &bw, &d);
 }
 
+static GLXPbuffer create_pbuffer(DrawableInfo &di)
+{
+  int pbattrs[] = {GLX_PBUFFER_WIDTH, di.width, GLX_PBUFFER_HEIGHT, di.height, GLX_PRESERVED_CONTENTS, True, None};
+  return primus.afns.glXCreatePbuffer(primus.adpy, di.fbconfig, pbattrs);
+}
+
 // Create or recall backing Pbuffer for the drawable
 static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
 {
@@ -529,10 +535,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
     note_geometry(dpy, draw, &di.width, &di.height);
   }
   if (!di.pbuffer)
-  {
-    int pbattrs[] = {GLX_PBUFFER_WIDTH, di.width, GLX_PBUFFER_HEIGHT, di.height, GLX_PRESERVED_CONTENTS, True, None};
-    di.pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, di.fbconfig, pbattrs);
-  }
+    di.pbuffer = create_pbuffer(di);
   return di.pbuffer;
 }
 
@@ -562,8 +565,7 @@ static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di
     return;
   di.width = w; di.height = h;
   primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
-  int pbattrs[] = {GLX_PBUFFER_WIDTH, di.width, GLX_PBUFFER_HEIGHT, di.height, GLX_PRESERVED_CONTENTS, True, None};
-  di.pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, di.fbconfig, pbattrs);
+  di.pbuffer = create_pbuffer(di);
   GLXContext actx = glXGetCurrentContext();
   primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, actx);
   di.r.reinit = true;
