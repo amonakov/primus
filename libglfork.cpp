@@ -152,10 +152,11 @@ struct EarlyInitializer {
     connect(sock, (struct sockaddr *)&addr, sizeof(addr));
     if (errno)
       perror("connect");
-    char c = 'C';
+    static char c[256] = "C";
     send(sock, &c, 1, 0);
-    recv(sock, &c, 1, 0);
-    die_if(c != 'Y', "failure contacting bumblebee daemon\n");
+    recv(sock, &c, 255, 0);
+    die_if(c[0] == 'N', "Bumblebee daemon reported: %s\n", c + 5);
+    die_if(c[0] != 'Y', "failure contacting Bumblebee daemon\n");
     // the socket will be closed when the application quits, then bumblebee will shut down the secondary X
 #else
 #warning Building without Bumblebee daemon support
