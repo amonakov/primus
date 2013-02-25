@@ -44,7 +44,7 @@ static void *mdlopen(const char *paths, int flag)
 static void *real_dlsym(void *handle, const char *symbol)
 {
   typedef void* (*dlsym_fn)(void *, const char*);
-  static dlsym_fn pdlsym = (dlsym_fn) dlsym(RTLD_DEFAULT, "dlsym");
+  static dlsym_fn pdlsym = (dlsym_fn) dlsym(dlopen("libdl.so.2", RTLD_LAZY), "dlsym");
   return pdlsym(handle, symbol);
 }
 
