@@ -20,7 +20,7 @@ In distributions
   and [lib32-primus-git](https://aur.archlinux.org/packages.php?ID=63240)
   in AUR
 * Gentoo: `primus-9999.ebuild` in the `bumblebee` overlay
-* Ubuntu: [primus PPA](https://launchpad.net/~zhurikhin/+archive/primus)
+* Ubuntu: in the [Bumblebee PPA](https://launchpad.net/~bumblebee/+archive/stable)
 
 Building for multilib (32-bit + 64-bit) systems
 -----------------------------------------------
