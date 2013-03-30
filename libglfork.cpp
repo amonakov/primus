@@ -150,10 +150,36 @@ struct EarlyInitializer {
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, getconf(BUMBLEBEE_SOCKET), sizeof(addr.sun_path));
     connect(sock, (struct sockaddr *)&addr, sizeof(addr));
-    if (errno)
-      perror("connect");
-    static char c[256] = "C";
-    send(sock, &c, 1, 0);
+    die_if(errno, "failed to connect to Bumblebee daemon: %s\n", strerror(errno));
+    static char c[256];
+    if (!getenv("PRIMUS_DISPLAY"))
+    {
+      send(sock, "Q VirtualDisplay", strlen("Q VirtualDisplay") + 1, 0);
+      recv(sock, &c, 255, 0);
+      die_if(memcmp(c, "Value: ", strlen("Value: ")), "unexpected query response\n");
+      *strchrnul(c, '\n') = 0;
+      setenv("PRIMUS_DISPLAY", c + 7, 1);
+    }
+    if (!getenv("PRIMUS_libGLa"))
+    {
+      send(sock, "Q LibraryPath", strlen("Q LibraryPath") + 1, 0);
+      recv(sock, &c, 255, 0);
+      die_if(memcmp(c, "Value: ", strlen("Value: ")), "unexpected query response\n");
+      *strchrnul(c, '\n') = 0;
+      int npaths = 0;
+      for (char *p = c + 7; *p; npaths++, p = strchrnul(p + 1, ':'));
+      if (npaths)
+      {
+	char *bblibs = new char[strlen(c + 7) + npaths * strlen("libGL.so.1") + 1], *b = bblibs, *n, *p;
+	for (p = c + 7; *p; p = n)
+	{
+	  n = strchrnul(p + 1, ':');
+	  b += sprintf(b, "%.*s/libGL.so.1", n - p, p);
+	}
+	setenv("PRIMUS_libGLa", bblibs, 1);
+      }
+    }
+    send(sock, "C", 1, 0);
     recv(sock, &c, 255, 0);
     die_if(c[0] == 'N', "Bumblebee daemon reported: %s\n", c + 5);
     die_if(c[0] != 'Y', "failure contacting Bumblebee daemon\n");
