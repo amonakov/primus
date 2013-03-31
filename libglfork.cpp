@@ -93,11 +93,11 @@ struct DrawableInfo {
   struct {
     pthread_t worker;
     sem_t acqsem, relsem;
-    bool reinit;
+    enum {NONE, RESIZE, SHUTDOWN} reinit;
 
     void spawn_worker(GLXDrawable draw, void* (*work)(void*))
     {
-      reinit = true;
+      reinit = RESIZE;
       sem_init(&acqsem, 0, 0);
       sem_init(&relsem, 0, 0);
       pthread_create(&worker, NULL, work, (void*)draw);
@@ -115,8 +115,7 @@ struct DrawableInfo {
   {
     if (r.worker)
     {
-      width = -1;
-      r.reinit = true;
+      r.reinit = r.SHUTDOWN;
       sem_post(&r.acqsem);
       sem_wait(&r.relsem);
       r.reap_worker();
@@ -327,9 +326,7 @@ static void* display_work(void *vd)
     profiler.tick(true);
     if (di.d.reinit)
     {
-      di.d.reinit = false;
-      width = di.width; height = di.height;
-      if (width == -1)
+      if (di.d.reinit == di.d.SHUTDOWN)
       {
 	primus.dfns.glDeleteTextures(1, &quad_texture);
 	primus.dfns.glXMakeCurrent(primus.ddpy, 0, NULL);
@@ -337,6 +334,8 @@ static void* display_work(void *vd)
 	sem_post(&di.d.relsem);
 	return NULL;
       }
+      di.d.reinit = di.d.NONE;
+      width = di.width; height = di.height;
       primus.dfns.glViewport(0, 0, width, height);
       primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
       sem_post(&di.d.relsem);
@@ -379,24 +378,22 @@ static void* readback_work(void *vd)
     profiler.tick(true);
     if (di.r.reinit)
     {
-      di.r.reinit = false;
-      width = di.width; height = di.height;
       clock_gettime(CLOCK_REALTIME, &tp);
       tp.tv_sec  += 1;
       // Wait for D worker, if active
       if (!primus.sync && sem_timedwait(&di.d.relsem, &tp))
       {
 	pthread_cancel(di.d.worker);
-	primus_warn("killed a worker to proceed\n");
 	sem_post(&di.d.relsem); // Pretend that D worker completed reinit
-	assert(width == -1);    // Cannot proceed without the buddy
+	primus_warn("timeout waiting for display worker\n");
+	die_if(di.r.reinit != di.r.SHUTDOWN, "killed worker on resize\n");
       }
-      di.d.reinit = true;
+      di.d.reinit = di.r.reinit;
       sem_post(&di.d.acqsem); // Signal D worker to reinit
       sem_wait(&di.d.relsem); // Wait until reinit was completed
       if (!primus.sync)
 	sem_post(&di.d.relsem); // Unlock as no PBO is currently mapped
-      if (width == -1)
+      if (di.r.reinit == di.r.SHUTDOWN)
       {
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
@@ -406,6 +403,8 @@ static void* readback_work(void *vd)
 	sem_post(&di.r.relsem);
 	return NULL;
       }
+      di.r.reinit = di.r.NONE;
+      width = di.width; height = di.height;
       primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, context);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
@@ -595,7 +594,7 @@ static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di
   di.pbuffer = create_pbuffer(di);
   GLXContext actx = glXGetCurrentContext();
   primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, actx);
-  di.r.reinit = true;
+  di.r.reinit = di.r.RESIZE;
 }
 
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
