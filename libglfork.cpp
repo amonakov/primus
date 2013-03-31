@@ -170,7 +170,7 @@ struct EarlyInitializer {
       for (char *p = c + 7; *p; npaths++, p = strchrnul(p + 1, ':'));
       if (npaths)
       {
-	char *bblibs = new char[strlen(c + 7) + npaths * strlen("libGL.so.1") + 1], *b = bblibs, *n, *p;
+	char *bblibs = new char[strlen(c + 7) + npaths * strlen("/libGL.so.1") + 1], *b = bblibs, *n, *p;
 	for (p = c + 7; *p; p = n)
 	{
 	  n = strchrnul(p + 1, ':');
