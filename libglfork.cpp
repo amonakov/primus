@@ -174,7 +174,7 @@ struct EarlyInitializer {
 	for (p = c + 7; *p; p = n)
 	{
 	  n = strchrnul(p + 1, ':');
-	  b += sprintf(b, "%.*s/libGL.so.1", n - p, p);
+	  b += sprintf(b, "%.*s/libGL.so.1", (int)(n - p), p);
 	}
 	setenv("PRIMUS_libGLa", bblibs, 1);
 	delete[] bblibs;
