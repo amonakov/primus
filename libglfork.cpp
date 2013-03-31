@@ -655,18 +655,19 @@ void glXDestroyWindow(Display *dpy, GLXWindow window)
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
 {
-  GLXPbuffer pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, config, attribList);
+  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(primus.ddpy, get_dpy_fbc(dpy, config), attribList);
   DrawableInfo &di = primus.drawables[pbuffer];
   di.kind = di.Pbuffer;
   di.fbconfig = config;
-  di.pbuffer = pbuffer;
+  di.pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, config, attribList);
   return pbuffer;
 }
 
 void glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf)
 {
+  assert(primus.drawables.known(pbuf));
   primus.drawables.erase(pbuf);
-  primus.afns.glXDestroyPbuffer(primus.adpy, pbuf);
+  primus.dfns.glXDestroyPbuffer(primus.ddpy, pbuf);
 }
 
 GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList)
