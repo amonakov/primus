@@ -177,6 +177,7 @@ struct EarlyInitializer {
 	  b += sprintf(b, "%.*s/libGL.so.1", n - p, p);
 	}
 	setenv("PRIMUS_libGLa", bblibs, 1);
+	delete[] bblibs;
       }
     }
     send(sock, "C", 1, 0);
