@@ -718,14 +718,17 @@ void glXDestroyGLXPixmap(Display *dpy, GLXPixmap pixmap)
 
 XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
 {
+  if (!primus.afns.glXGetVisualFromFBConfig(primus.adpy, config))
+    return NULL;
   return primus.dfns.glXGetVisualFromFBConfig(dpy, get_dpy_fbc(dpy, config));
 }
 
 int glXGetFBConfigAttrib(Display *dpy, GLXFBConfig config, int attribute, int *value)
 {
-  if (attribute == GLX_VISUAL_ID)
+  int r = primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attribute, value);
+  if (attribute == GLX_VISUAL_ID && *value)
     return primus.dfns.glXGetFBConfigAttrib(dpy, get_dpy_fbc(dpy, config), attribute, value);
-  return primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attribute, value);
+  return r;
 }
 
 void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned int *value)
