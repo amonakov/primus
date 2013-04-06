@@ -132,6 +132,20 @@ struct DrawablesInfo: public std::map<GLXDrawable, DrawableInfo> {
   }
 };
 
+struct ContextInfo {
+  GLXFBConfig fbconfig;
+  int sharegroup;
+};
+
+struct ContextsInfo: public std::map<GLXContext, ContextInfo> {
+  void record(GLXContext ctx, GLXFBConfig config, GLXContext share)
+  {
+    static int nsharegroups;
+    int sharegroup = share ? (*this)[share].sharegroup : nsharegroups++;
+    (*this)[ctx] = (ContextInfo){config, sharegroup};
+  }
+};
+
 #define stringify(s) #s
 // Shorthand for obtaining compile-time configurable value that can be
 // overridden by environment
@@ -209,9 +223,9 @@ static struct PrimusInfo {
   const void *needed_global;
   CapturedFns afns;
   CapturedFns dfns;
-  DrawablesInfo drawables;
   // FIXME: there are race conditions in accesses to these
-  std::map<GLXContext, GLXFBConfig> actx2fbconfig;
+  DrawablesInfo drawables;
+  ContextsInfo contexts;
 
   PrimusInfo():
     sync(atoi(getconf(PRIMUS_SYNC))),
@@ -488,7 +502,7 @@ GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList
 {
   GLXFBConfig *acfgs = match_fbconfig(dpy, vis);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, shareList, direct);
-  primus.actx2fbconfig[actx] = *acfgs;
+  primus.contexts.record(actx, *acfgs, shareList);
   return actx;
 }
 
@@ -512,16 +526,16 @@ static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg)
 GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType, GLXContext shareList, Bool direct)
 {
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, config, renderType, shareList, direct);
-  primus.actx2fbconfig[actx] = config;
+  primus.contexts.record(actx, config, shareList);
   return actx;
 }
 
 void glXDestroyContext(Display *dpy, GLXContext ctx)
 {
-  primus.actx2fbconfig.erase(ctx);
+  primus.contexts.erase(ctx);
   // kludge: reap background tasks when deleting the last context
   // otherwise something will deadlock during unloading the library
-  if (primus.actx2fbconfig.empty())
+  if (primus.contexts.empty())
     for (DrawablesInfo::iterator i = primus.drawables.begin(); i != primus.drawables.end(); i++)
       i->second.reap_workers();
   primus.afns.glXDestroyContext(primus.adpy, ctx);
@@ -553,7 +567,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
   if (!known)
   {
     // Drawable is a plain X Window. Get the FBConfig from the context
-    GLXFBConfig acfg = primus.actx2fbconfig[ctx];
+    GLXFBConfig acfg = primus.contexts[ctx].fbconfig;
     assert(acfg);
     di.kind = di.XWindow;
     di.fbconfig = acfg;
@@ -603,7 +617,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
-  if (di.r.worker && di.actx != glXGetCurrentContext())
+  if (di.r.worker && primus.contexts[di.actx].sharegroup != primus.contexts[glXGetCurrentContext()].sharegroup)
   {
     primus_warn("glXSwapBuffers: respawning threads after context change\n");
     di.reap_workers();
