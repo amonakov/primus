@@ -226,6 +226,7 @@ static struct PrimusInfo {
   // FIXME: there are race conditions in accesses to these
   DrawablesInfo drawables;
   ContextsInfo contexts;
+  GLXFBConfig *dconfigs;
 
   PrimusInfo():
     sync(atoi(getconf(PRIMUS_SYNC))),
@@ -238,6 +239,9 @@ static struct PrimusInfo {
   {
     die_if(!adpy, "failed to open secondary X display\n");
     die_if(!needed_global, "failed to load PRIMUS_LOAD_GLOBAL\n");
+    int ncfg, attrs[] = {GLX_DOUBLEBUFFER, GL_TRUE, None};
+    dconfigs = dfns.glXChooseFBConfig(ddpy, 0, attrs, &ncfg);
+    assert(ncfg);
   }
 } primus;
 
@@ -310,8 +314,6 @@ public:
   }
 };
 
-static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg);
-
 static void* display_work(void *vd)
 {
   GLXDrawable drawable = (GLXDrawable)vd;
@@ -322,7 +324,7 @@ static void* display_work(void *vd)
   GLuint quad_texture = 0;
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
-  GLXContext context = primus.dfns.glXCreateNewContext(primus.ddpy, get_dpy_fbc(primus.ddpy, di.fbconfig), GLX_RGBA_TYPE, NULL, True);
+  GLXContext context = primus.dfns.glXCreateNewContext(primus.ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
   die_if(!primus.dfns.glXIsDirect(primus.ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
   primus.dfns.glXMakeCurrent(primus.ddpy, drawable, context);
@@ -455,72 +457,27 @@ static void* readback_work(void *vd)
   return NULL;
 }
 
-// Find appropriate FBConfigs on both adpy and ddpy for a given Visual
-static GLXFBConfig* match_fbconfig(Display *dpy, XVisualInfo *vis)
+// Find appropriate FBConfigs on adpy for a given Visual on ddpy
+static GLXFBConfig* match_fbconfig(XVisualInfo *vis)
 {
-  int acfgattrs[] = {
-    GLX_DRAWABLE_TYPE,	GLX_WINDOW_BIT,
-    GLX_RENDER_TYPE, GLX_RGBA_BIT,
-    GLX_DOUBLEBUFFER, GL_TRUE,
-    GLX_STEREO, GL_FALSE,
-    GLX_AUX_BUFFERS, 0,
-    GLX_RED_SIZE, 0,
-    GLX_GREEN_SIZE, 0,
-    GLX_BLUE_SIZE, 0,
-    GLX_ALPHA_SIZE, 0,
-    GLX_DEPTH_SIZE, 0,
-    GLX_STENCIL_SIZE, 0,
-    GLX_ACCUM_RED_SIZE, 0,
-    GLX_ACCUM_GREEN_SIZE, 0,
-    GLX_ACCUM_BLUE_SIZE, 0,
-    GLX_ACCUM_ALPHA_SIZE, 0,
-    GLX_SAMPLE_BUFFERS, 0,
-    GLX_SAMPLES, 0,
-    None
+  int ncfg, attrs[] = {
+    GLX_DOUBLEBUFFER, 0, GLX_STEREO, 0, GLX_AUX_BUFFERS, 0,
+    GLX_RED_SIZE, 0, GLX_GREEN_SIZE, 0, GLX_BLUE_SIZE, 0,
+    GLX_ALPHA_SIZE, 0, GLX_DEPTH_SIZE, 0, GLX_STENCIL_SIZE, 0,
+    GLX_ACCUM_RED_SIZE, 0, GLX_ACCUM_GREEN_SIZE, 0, GLX_ACCUM_BLUE_SIZE, 0, GLX_ACCUM_ALPHA_SIZE, 0,
+    GLX_SAMPLE_BUFFERS, 0, GLX_SAMPLES, 0, None
   };
-  glXGetConfig(dpy, vis, GLX_DOUBLEBUFFER, &acfgattrs[5]);
-  glXGetConfig(dpy, vis, GLX_STEREO,       &acfgattrs[7]);
-  glXGetConfig(dpy, vis, GLX_AUX_BUFFERS,  &acfgattrs[9]);
-  glXGetConfig(dpy, vis, GLX_RED_SIZE,     &acfgattrs[11]);
-  glXGetConfig(dpy, vis, GLX_GREEN_SIZE,   &acfgattrs[13]);
-  glXGetConfig(dpy, vis, GLX_BLUE_SIZE,    &acfgattrs[15]);
-  glXGetConfig(dpy, vis, GLX_ALPHA_SIZE,   &acfgattrs[17]);
-  glXGetConfig(dpy, vis, GLX_DEPTH_SIZE,   &acfgattrs[19]);
-  glXGetConfig(dpy, vis, GLX_STENCIL_SIZE, &acfgattrs[21]);
-  glXGetConfig(dpy, vis, GLX_ACCUM_RED_SIZE,   &acfgattrs[23]);
-  glXGetConfig(dpy, vis, GLX_ACCUM_GREEN_SIZE, &acfgattrs[25]);
-  glXGetConfig(dpy, vis, GLX_ACCUM_BLUE_SIZE,  &acfgattrs[27]);
-  glXGetConfig(dpy, vis, GLX_ACCUM_ALPHA_SIZE, &acfgattrs[29]);
-  glXGetConfig(dpy, vis, GLX_SAMPLE_BUFFERS, &acfgattrs[31]);
-  glXGetConfig(dpy, vis, GLX_SAMPLES,        &acfgattrs[33]);
-  //assert(acfgattrs[5] && !acfgattrs[7]);
-  int ncfg;
-  return primus.afns.glXChooseFBConfig(primus.adpy, 0, acfgattrs, &ncfg);
+  for (int i = 0; attrs[i] != None; i += 2)
+    primus.dfns.glXGetConfig(primus.ddpy, vis, attrs[i], &attrs[i+1]);
+  return primus.afns.glXChooseFBConfig(primus.adpy, 0, attrs, &ncfg);
 }
 
 GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList, Bool direct)
 {
-  GLXFBConfig *acfgs = match_fbconfig(dpy, vis);
+  GLXFBConfig *acfgs = match_fbconfig(vis);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, shareList, direct);
   primus.contexts.record(actx, *acfgs, shareList);
   return actx;
-}
-
-// Find ddpy FBConfig to draw on.  No depth, stencil or such required.
-static GLXFBConfig get_dpy_fbc(Display *dpy, GLXFBConfig acfg)
-{
-  int dcfgattrs[] = {
-    GLX_DRAWABLE_TYPE,	GLX_WINDOW_BIT,
-    GLX_RENDER_TYPE, GLX_RGBA_BIT,
-    GLX_RED_SIZE, 8, GLX_GREEN_SIZE, 8, GLX_BLUE_SIZE, 8, GLX_ALPHA_SIZE, 8,
-    GLX_DOUBLEBUFFER, GL_TRUE,
-    None
-  };
-  // FIXME try to glXGetFBConfigAttrib(acfg) to adjust?
-  int ncfg;
-  GLXFBConfig *dcfg = primus.dfns.glXChooseFBConfig(dpy, 0, dcfgattrs, &ncfg);
-  assert(ncfg);
-  return *dcfg;
 }
 
 GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType, GLXContext shareList, Bool direct)
@@ -643,7 +600,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
-  GLXWindow glxwin = primus.dfns.glXCreateWindow(primus.ddpy, get_dpy_fbc(dpy, config), win, attribList);
+  GLXWindow glxwin = primus.dfns.glXCreateWindow(primus.ddpy, primus.dconfigs[0], win, attribList);
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
   di.fbconfig = config;
@@ -668,7 +625,7 @@ void glXDestroyWindow(Display *dpy, GLXWindow window)
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
 {
-  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(primus.ddpy, get_dpy_fbc(dpy, config), attribList);
+  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(primus.ddpy, primus.dconfigs[0], attribList);
   DrawableInfo &di = primus.drawables[pbuffer];
   di.kind = di.Pbuffer;
   di.fbconfig = config;
@@ -685,7 +642,7 @@ void glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf)
 
 GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList)
 {
-  GLXPixmap glxpix = primus.dfns.glXCreatePixmap(dpy, get_dpy_fbc(dpy, config), pixmap, attribList);
+  GLXPixmap glxpix = primus.dfns.glXCreatePixmap(dpy, primus.dconfigs[0], pixmap, attribList);
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   di.fbconfig = config;
@@ -706,7 +663,7 @@ GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   note_geometry(dpy, pixmap, &di.width, &di.height);
-  GLXFBConfig *acfgs = match_fbconfig(dpy, visual);
+  GLXFBConfig *acfgs = match_fbconfig(visual);
   di.fbconfig = *acfgs;
   return glxpix;
 }
@@ -720,14 +677,22 @@ XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
 {
   if (!primus.afns.glXGetVisualFromFBConfig(primus.adpy, config))
     return NULL;
-  return primus.dfns.glXGetVisualFromFBConfig(dpy, get_dpy_fbc(dpy, config));
+  int attrs[] = {
+    GLX_RGBA, GLX_DOUBLEBUFFER,
+    GLX_RED_SIZE, 0, GLX_GREEN_SIZE, 0, GLX_BLUE_SIZE, 0,
+    GLX_ALPHA_SIZE, 0, GLX_DEPTH_SIZE, 0, GLX_STENCIL_SIZE, 0,
+    GLX_SAMPLE_BUFFERS, 0, GLX_SAMPLES, 0, None
+  };
+  for (int i = 2; attrs[i] != None; i += 2)
+    primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attrs[i], &attrs[i+1]);
+  return glXChooseVisual(dpy, 0, attrs);
 }
 
 int glXGetFBConfigAttrib(Display *dpy, GLXFBConfig config, int attribute, int *value)
 {
   int r = primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attribute, value);
   if (attribute == GLX_VISUAL_ID && *value)
-    return primus.dfns.glXGetFBConfigAttrib(dpy, get_dpy_fbc(dpy, config), attribute, value);
+    return primus.dfns.glXGetConfig(primus.ddpy, glXGetVisualFromFBConfig(dpy, config), attribute, value);
   return r;
 }
 
