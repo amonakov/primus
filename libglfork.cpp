@@ -685,7 +685,15 @@ XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
   };
   for (int i = 2; attrs[i] != None; i += 2)
     primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attrs[i], &attrs[i+1]);
-  return glXChooseVisual(dpy, 0, attrs);
+  XVisualInfo *vis = glXChooseVisual(dpy, 0, attrs);
+  for (int i = 2; attrs[i] != None && vis; i += 2)
+  {
+    int tmp = attrs[i+1];
+    primus.dfns.glXGetConfig(primus.ddpy, vis, attrs[i], &attrs[i+1]);
+    if (tmp != attrs[i+1])
+      vis = NULL;
+  }
+  return vis;
 }
 
 int glXGetFBConfigAttrib(Display *dpy, GLXFBConfig config, int attribute, int *value)
