@@ -31,7 +31,7 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
 (reflecting how `/usr/lib*` are named):
 
 * Arch needs `lib` and `lib32` as above
-* Gentoo needs `lib64` and `lib32`, and adjusted `primusrun` (see comments)
+* Gentoo needs `lib64` and `lib32`
 * RPM-based may need `lib64` and `lib`
 * Debian (with multiarch) needs `lib/x86_64-linux-gnu` and `lib/i386-linux-gnu`
 * Ubuntu (with multiarch) seems rather inconsistent.  The dynamic linker
@@ -40,20 +40,15 @@ Adjust `LIBDIR` variables above as appropriate for your distribution
   like the following is needed:
 
         export PRIMUS_libGLd='/usr/lib/$$LIB/mesa/libGL.so.1'
-        export PRIMUS_libGLa='/usr/lib/nvidia-current/libGL.so.1'
         LIBDIR=x86_64-linux-gnu make
-        export PRIMUS_libGLa='/usr/lib32/nvidia-current/libGL.so.1'
         LIBDIR=i386-linux-gnu CXX=g++\ -m32 make
-        unset PRIMUS_libGLa
         unset PRIMUS_libGLd
 
   Starting from 13.04, Ubuntu needs the same `LIBDIR` paths as Debian (with
   leading `lib/`); consequently, `lib/` in `PRIMUS_libGLd` should be omitted.
 
-  Furthermore, like on Gentoo, `libnvidia-tls.so` is not present in default
-  shared library search directories. The following variant of adjustment is needed:
-
-        PRIMUS_libGL=${PRIMUS_libGL}:/usr/lib/nvidia-current:/usr/lib32/nvidia-current
+  Furthermore, `libnvidia-tls.so` is not present in default shared library
+  search directories.  Uncomment the corresponding line in `primusrun`.
 
 Issues under compositing WMs
 ----------------------------
