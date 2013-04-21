@@ -681,7 +681,7 @@ XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
     GLX_RGBA, GLX_DOUBLEBUFFER,
     GLX_RED_SIZE, 0, GLX_GREEN_SIZE, 0, GLX_BLUE_SIZE, 0,
     GLX_ALPHA_SIZE, 0, GLX_DEPTH_SIZE, 0, GLX_STENCIL_SIZE, 0,
-    GLX_SAMPLE_BUFFERS, 0, GLX_SAMPLES, 0, None
+    GLX_SAMPLE_BUFFERS, 0, None
   };
   for (int i = 2; attrs[i] != None; i += 2)
     primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attrs[i], &attrs[i+1]);
