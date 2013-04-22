@@ -677,25 +677,40 @@ void glXDestroyGLXPixmap(Display *dpy, GLXPixmap pixmap)
   glXDestroyPixmap(primus.ddpy, pixmap);
 }
 
-XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
+static XVisualInfo *match_visual(int attrs[])
 {
-  if (!primus.afns.glXGetVisualFromFBConfig(primus.adpy, config))
-    return NULL;
-  int attrs[] = {
-    GLX_RGBA, GLX_DOUBLEBUFFER,
-    GLX_RED_SIZE, 0, GLX_GREEN_SIZE, 0, GLX_BLUE_SIZE, 0,
-    GLX_ALPHA_SIZE, 0, GLX_DEPTH_SIZE, 0, GLX_STENCIL_SIZE, 0,
-    GLX_SAMPLE_BUFFERS, 0, None
-  };
-  for (int i = 2; attrs[i] != None; i += 2)
-    primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attrs[i], &attrs[i+1]);
-  XVisualInfo *vis = glXChooseVisual(dpy, 0, attrs);
+  XVisualInfo *vis = glXChooseVisual(primus.ddpy, 0, attrs);
   for (int i = 2; attrs[i] != None && vis; i += 2)
   {
     int tmp = attrs[i+1];
     primus.dfns.glXGetConfig(primus.ddpy, vis, attrs[i], &attrs[i+1]);
     if (tmp != attrs[i+1])
       vis = NULL;
+  }
+  return vis;
+}
+
+XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
+{
+  if (!primus.afns.glXGetVisualFromFBConfig(primus.adpy, config))
+    return NULL;
+  int i, attrs[] = {
+    GLX_RGBA, GLX_DOUBLEBUFFER,
+    GLX_RED_SIZE, 0, GLX_GREEN_SIZE, 0, GLX_BLUE_SIZE, 0,
+    GLX_ALPHA_SIZE, 0, GLX_DEPTH_SIZE, 0, GLX_STENCIL_SIZE, 0,
+    GLX_SAMPLE_BUFFERS, 0, GLX_SAMPLES, 0, None
+  };
+  for (i = 2; attrs[i] != None; i += 2)
+    primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attrs[i], &attrs[i+1]);
+  XVisualInfo *vis = NULL;
+  for (i -= 2; i >= 2; i -= 2)
+  {
+    if ((vis = match_visual(attrs)))
+      break;
+    attrs[i+1] = 1;
+    if ((vis = match_visual(attrs)))
+      break;
+    attrs[i+1] = 0;
   }
   return vis;
 }
