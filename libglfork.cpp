@@ -708,14 +708,10 @@ XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
   for (i = 2; attrs[i] != None; i += 2)
     primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attrs[i], &attrs[i+1]);
   XVisualInfo *vis = NULL;
-  for (i -= 2; i >= 2; i -= 2)
+  for (i -= 2; i >= 0 && !vis; i -= 2)
   {
-    if ((vis = match_visual(attrs)))
-      break;
-    attrs[i+1] = 1;
-    if ((vis = match_visual(attrs)))
-      break;
-    attrs[i+1] = 0;
+    vis = match_visual(attrs);
+    attrs[i] = None;
   }
   return vis;
 }
