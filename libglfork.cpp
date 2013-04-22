@@ -518,12 +518,12 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
 {
   if (!draw)
     return 0;
-  assert(ctx);
   bool known = primus.drawables.known(draw);
   DrawableInfo &di = primus.drawables[draw];
   if (!known)
   {
     // Drawable is a plain X Window. Get the FBConfig from the context
+    assert(ctx);
     GLXFBConfig acfg = primus.contexts[ctx].fbconfig;
     assert(acfg);
     di.kind = di.XWindow;
@@ -711,7 +711,7 @@ int glXGetFBConfigAttrib(Display *dpy, GLXFBConfig config, int attribute, int *v
 void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned int *value)
 {
   assert(primus.drawables.known(draw));
-  primus.afns.glXQueryDrawable(primus.adpy, primus.drawables[draw].pbuffer, attribute, value);
+  primus.afns.glXQueryDrawable(primus.adpy, lookup_pbuffer(dpy, draw, NULL), attribute, value);
 }
 
 void glXUseXFont(Font font, int first, int count, int list)
