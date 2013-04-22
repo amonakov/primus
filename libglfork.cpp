@@ -524,12 +524,17 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
   {
     // Drawable is a plain X Window. Get the FBConfig from the context
     assert(ctx);
-    GLXFBConfig acfg = primus.contexts[ctx].fbconfig;
-    assert(acfg);
     di.kind = di.XWindow;
-    di.fbconfig = acfg;
+    di.fbconfig = primus.contexts[ctx].fbconfig;
     di.window = draw;
     note_geometry(dpy, draw, &di.width, &di.height);
+  }
+  else if (di.kind == di.XWindow && ctx && di.fbconfig != primus.contexts[ctx].fbconfig)
+  {
+    // Recreate the backing PBuffer when a different FBConfig is used
+    primus_warn("recreating incompatible pbuffer\n");
+    primus.drawables.erase(draw);
+    return lookup_pbuffer(dpy, draw, ctx);
   }
   if (!di.pbuffer)
     di.pbuffer = create_pbuffer(di);
@@ -548,8 +553,8 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
   if (draw == read)
     return glXMakeCurrent(dpy, draw, ctx);
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
-  tsdata.make_current(dpy, draw, read);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
+  tsdata.make_current(dpy, draw, read);
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
 
