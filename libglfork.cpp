@@ -629,7 +629,11 @@ GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribL
   DrawableInfo &di = primus.drawables[pbuffer];
   di.kind = di.Pbuffer;
   di.fbconfig = config;
-  di.pbuffer = primus.afns.glXCreatePbuffer(primus.adpy, config, attribList);
+  for (int i = 0; attribList[i] != None; i++)
+    if (attribList[i] == GLX_PBUFFER_WIDTH)
+      di.width = attribList[i+1];
+    else if (attribList[i] == GLX_PBUFFER_HEIGHT)
+      di.height = attribList[i+1];
   return pbuffer;
 }
 
