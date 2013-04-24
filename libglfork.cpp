@@ -146,10 +146,9 @@ struct ContextsInfo: public std::map<GLXContext, ContextInfo> {
   }
 };
 
-#define stringify(s) #s
 // Shorthand for obtaining compile-time configurable value that can be
 // overridden by environment
-#define getconf(V) (getenv(#V) ? getenv(#V) : stringify(V))
+#define getconf(V) (getenv(#V) ? getenv(#V) : V)
 
 // Runs before all other initialization takes place
 struct EarlyInitializer {
