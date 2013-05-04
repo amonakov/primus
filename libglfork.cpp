@@ -528,12 +528,16 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
     di.window = draw;
     note_geometry(dpy, draw, &di.width, &di.height);
   }
-  else if (di.kind == di.XWindow && ctx && di.fbconfig != primus.contexts[ctx].fbconfig)
+  else if (ctx && di.fbconfig != primus.contexts[ctx].fbconfig)
   {
-    // Recreate the backing PBuffer when a different FBConfig is used
-    primus_warn("recreating incompatible pbuffer\n");
-    primus.drawables.erase(draw);
-    return lookup_pbuffer(dpy, draw, ctx);
+    if (di.pbuffer)
+    {
+      primus_warn("recreating incompatible pbuffer\n");
+      di.reap_workers();
+      primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
+      di.pbuffer = 0;
+    }
+    di.fbconfig = primus.contexts[ctx].fbconfig;
   }
   if (!di.pbuffer)
     di.pbuffer = create_pbuffer(di);
