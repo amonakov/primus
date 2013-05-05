@@ -215,7 +215,6 @@ static struct PrimusInfo {
   Display *adpy;
   // The "displaying" X display. The same as the application is using, but
   // primus opens its own connection.
-  // FIXME: worker threads need to open their own connections as well?
   Display *ddpy;
   // An artifact: primus needs to make symbols from libglapi.so globally
   // visible before loading Mesa
@@ -323,10 +322,11 @@ static void* display_work(void *vd)
   GLuint quad_texture = 0;
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
-  GLXContext context = primus.dfns.glXCreateNewContext(primus.ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
-  die_if(!primus.dfns.glXIsDirect(primus.ddpy, context),
+  Display *ddpy = XOpenDisplay(NULL);
+  GLXContext context = primus.dfns.glXCreateNewContext(ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
+  die_if(!primus.dfns.glXIsDirect(ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
-  primus.dfns.glXMakeCurrent(primus.ddpy, drawable, context);
+  primus.dfns.glXMakeCurrent(ddpy, drawable, context);
   primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
   primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
   primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
@@ -344,8 +344,9 @@ static void* display_work(void *vd)
       if (di.d.reinit == di.d.SHUTDOWN)
       {
 	primus.dfns.glDeleteTextures(1, &quad_texture);
-	primus.dfns.glXMakeCurrent(primus.ddpy, 0, NULL);
-	primus.dfns.glXDestroyContext(primus.ddpy, context);
+	primus.dfns.glXMakeCurrent(ddpy, 0, NULL);
+	primus.dfns.glXDestroyContext(ddpy, context);
+	XCloseDisplay(ddpy);
 	sem_post(&di.d.relsem);
 	return NULL;
       }
@@ -361,7 +362,7 @@ static void* display_work(void *vd)
       sem_post(&di.d.relsem); // Unlock as soon as possible
     profiler.tick();
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
-    primus.dfns.glXSwapBuffers(primus.ddpy, drawable);
+    primus.dfns.glXSwapBuffers(ddpy, drawable);
     if (primus.sync)
       sem_post(&di.d.relsem); // Unlock only after drawing
     profiler.tick();
