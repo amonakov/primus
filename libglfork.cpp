@@ -324,6 +324,8 @@ static void* display_work(void *vd)
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
   Display *ddpy = XOpenDisplay(NULL);
+  if (di.kind == di.XWindow || di.kind == di.Window)
+    XSelectInput(ddpy, di.window, StructureNotifyMask);
   GLXContext context = primus.dfns.glXCreateNewContext(ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
   die_if(!primus.dfns.glXIsDirect(ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
@@ -362,6 +364,14 @@ static void* display_work(void *vd)
     if (!primus.sync)
       sem_post(&di.d.relsem); // Unlock as soon as possible
     profiler.tick();
+    for (int pending = XPending(ddpy); pending > 0; pending--)
+    {
+      XEvent event;
+      XNextEvent(ddpy, &event);
+      if (event.type != ConfigureNotify)
+	continue;
+      di.reinit = di.RESIZE; di.width = event.xconfigure.width; di.height = event.xconfigure.height;
+    }
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     primus.dfns.glXSwapBuffers(ddpy, drawable);
     if (primus.sync)
@@ -563,40 +573,24 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
 
-// Recreate the backing Pbuffer and reinitialize workers upon resize
-static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di)
-{
-  int w, h;
-  note_geometry(dpy, di.window, &w, &h);
-  if (w == di.width && h == di.height)
-    return;
-  di.width = w; di.height = h;
-  primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
-  di.pbuffer = create_pbuffer(di);
-  GLXContext actx = glXGetCurrentContext();
-  primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, actx);
-  di.r.reinit = di.RESIZE;
-}
-
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 {
   assert(primus.drawables.known(drawable));
   DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
-  if (di.r.worker && primus.contexts[di.actx].sharegroup != primus.contexts[glXGetCurrentContext()].sharegroup)
+  GLXContext ctx = glXGetCurrentContext();
+  if (!ctx)
+    primus_warn("glXSwapBuffers: no current context\n");
+  if (di.r.worker && di.actx && ctx && primus.contexts[di.actx].sharegroup != primus.contexts[ctx].sharegroup)
   {
     primus_warn("glXSwapBuffers: respawning threads after context change\n");
     di.reap_workers();
   }
-  if (di.kind == di.XWindow || di.kind == di.Window)
-    update_geometry(dpy, drawable, di);
   if (!di.r.worker)
   {
     // Need to create a sharing context to use GL sync objects
-    di.actx = glXGetCurrentContext();
-    if (!di.actx)
-      primus_warn("glXSwapBuffers: no current context\n");
+    di.actx = ctx;
     di.d.spawn_worker(drawable, display_work);
     di.r.spawn_worker(drawable, readback_work);
   }
@@ -606,6 +600,15 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   sem_wait(&di.r.relsem); // Wait until it has issued glReadBuffer
   primus.afns.glDeleteSync(di.sync);
   primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
+  if (di.reinit == di.RESIZE)
+  {
+    primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
+    di.pbuffer = create_pbuffer(di);
+    if (ctx) // FIXME: drawable can be current in other threads
+      glXMakeContextCurrent(dpy, tsdata.drawable, tsdata.read_drawable, ctx);
+    di.r.reinit = di.reinit;
+    di.reinit = di.NONE;
+  }
 }
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
