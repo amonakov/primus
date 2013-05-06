@@ -86,6 +86,7 @@ struct DrawableInfo {
   GLXPbuffer  pbuffer;
   Drawable window;
   int width, height;
+  enum ReinitTodo {NONE, RESIZE, SHUTDOWN} reinit;
   GLvoid *pixeldata;
   GLsync sync;
   GLXContext actx;
@@ -93,7 +94,7 @@ struct DrawableInfo {
   struct {
     pthread_t worker;
     sem_t acqsem, relsem;
-    enum {NONE, RESIZE, SHUTDOWN} reinit;
+    ReinitTodo reinit;
 
     void spawn_worker(GLXDrawable draw, void* (*work)(void*))
     {
@@ -115,7 +116,7 @@ struct DrawableInfo {
   {
     if (r.worker)
     {
-      r.reinit = r.SHUTDOWN;
+      r.reinit = SHUTDOWN;
       sem_post(&r.acqsem);
       sem_wait(&r.relsem);
       r.reap_worker();
@@ -341,7 +342,7 @@ static void* display_work(void *vd)
     profiler.tick(true);
     if (di.d.reinit)
     {
-      if (di.d.reinit == di.d.SHUTDOWN)
+      if (di.d.reinit == di.SHUTDOWN)
       {
 	primus.dfns.glDeleteTextures(1, &quad_texture);
 	primus.dfns.glXMakeCurrent(ddpy, 0, NULL);
@@ -350,7 +351,7 @@ static void* display_work(void *vd)
 	sem_post(&di.d.relsem);
 	return NULL;
       }
-      di.d.reinit = di.d.NONE;
+      di.d.reinit = di.NONE;
       width = di.width; height = di.height;
       primus.dfns.glViewport(0, 0, width, height);
       primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
@@ -402,14 +403,14 @@ static void* readback_work(void *vd)
 	pthread_cancel(di.d.worker);
 	sem_post(&di.d.relsem); // Pretend that D worker completed reinit
 	primus_warn("timeout waiting for display worker\n");
-	die_if(di.r.reinit != di.r.SHUTDOWN, "killed worker on resize\n");
+	die_if(di.r.reinit != di.SHUTDOWN, "killed worker on resize\n");
       }
       di.d.reinit = di.r.reinit;
       sem_post(&di.d.acqsem); // Signal D worker to reinit
       sem_wait(&di.d.relsem); // Wait until reinit was completed
       if (!primus.sync)
 	sem_post(&di.d.relsem); // Unlock as no PBO is currently mapped
-      if (di.r.reinit == di.r.SHUTDOWN)
+      if (di.r.reinit == di.SHUTDOWN)
       {
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
 	primus.afns.glUnmapBuffer(GL_PIXEL_PACK_BUFFER_EXT);
@@ -419,7 +420,7 @@ static void* readback_work(void *vd)
 	sem_post(&di.r.relsem);
 	return NULL;
       }
-      di.r.reinit = di.r.NONE;
+      di.r.reinit = di.NONE;
       width = di.width; height = di.height;
       primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, context);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
@@ -574,7 +575,7 @@ static void update_geometry(Display *dpy, GLXDrawable drawable, DrawableInfo &di
   di.pbuffer = create_pbuffer(di);
   GLXContext actx = glXGetCurrentContext();
   primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, actx);
-  di.r.reinit = di.r.RESIZE;
+  di.r.reinit = di.RESIZE;
 }
 
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
