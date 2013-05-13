@@ -329,7 +329,7 @@ static void* display_work(void *vd)
   GLXContext context = primus.dfns.glXCreateNewContext(ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
   die_if(!primus.dfns.glXIsDirect(ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
-  primus.dfns.glXMakeCurrent(ddpy, drawable, context);
+  primus.dfns.glXMakeCurrent(ddpy, di.window, context);
   primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
   primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
   primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
@@ -373,7 +373,7 @@ static void* display_work(void *vd)
       di.reinit = di.RESIZE; di.width = event.xconfigure.width; di.height = event.xconfigure.height;
     }
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
-    primus.dfns.glXSwapBuffers(ddpy, drawable);
+    primus.dfns.glXSwapBuffers(ddpy, di.window);
     if (primus.sync)
       sem_post(&di.d.relsem); // Unlock only after drawing
     profiler.tick();
