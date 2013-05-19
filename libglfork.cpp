@@ -324,8 +324,8 @@ static void* display_work(void *vd)
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
   Display *ddpy = XOpenDisplay(NULL);
-  if (di.kind == di.XWindow || di.kind == di.Window)
-    XSelectInput(ddpy, di.window, StructureNotifyMask);
+  assert(di.kind == di.XWindow || di.kind == di.Window);
+  XSelectInput(ddpy, di.window, StructureNotifyMask);
   GLXContext context = primus.dfns.glXCreateNewContext(ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
   die_if(!primus.dfns.glXIsDirect(ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
@@ -577,7 +577,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 {
   assert(primus.drawables.known(drawable));
   DrawableInfo &di = primus.drawables[drawable];
-  if (di.kind == di.Pbuffer)
+  if (di.kind == di.Pbuffer || di.kind == di.Pixmap)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   GLXContext ctx = glXGetCurrentContext();
   if (!ctx)
