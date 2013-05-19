@@ -319,7 +319,7 @@ static void* display_work(void *vd)
   DrawableInfo &di = primus.drawables[drawable];
   int width, height;
   static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
-  static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
+	       float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
   GLuint quad_texture = 0;
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
@@ -335,9 +335,8 @@ static void* display_work(void *vd)
   primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
   primus.dfns.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
   primus.dfns.glGenTextures(1, &quad_texture);
-  primus.dfns.glBindTexture(GL_TEXTURE_2D, quad_texture);
-  primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  primus.dfns.glEnable(GL_TEXTURE_2D);
+  primus.dfns.glBindTexture(GL_TEXTURE_RECTANGLE, quad_texture);
+  primus.dfns.glEnable(GL_TEXTURE_RECTANGLE);
   for (;;)
   {
     sem_wait(&di.d.acqsem);
@@ -354,13 +353,14 @@ static void* display_work(void *vd)
 	return NULL;
       }
       di.d.reinit = di.NONE;
-      width = di.width; height = di.height;
+      quad_texture_coords[4] = quad_texture_coords[6] = width = di.width;
+      quad_texture_coords[3] = quad_texture_coords[5] = height = di.height;
       primus.dfns.glViewport(0, 0, width, height);
-      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+      primus.dfns.glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
       sem_post(&di.d.relsem);
       continue;
     }
-    primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, di.pixeldata);
+    primus.dfns.glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, di.pixeldata);
     if (!primus.sync)
       sem_post(&di.d.relsem); // Unlock as soon as possible
     profiler.tick();
