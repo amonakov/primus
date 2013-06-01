@@ -810,12 +810,12 @@ ret name par \
 
 // OpenGL forwarders
 #define DEF_GLX_PROTO(ret, name, par, ...) \
-void ifunc_##name(void) asm(#name) __attribute__((visibility("default"),ifunc("i" #name))); \
-extern "C" { \
 static ret l##name par \
 { return primus.afns.name(__VA_ARGS__); } \
-static void *i##name(void) \
-{ return primus.afns.handle ? real_dlsym(primus.afns.handle, #name) : (void*)l##name; } }
+asm(".type " #name ", @gnu_indirect_function"); \
+void *ifunc_##name(void) asm(#name) __attribute__((visibility("default"))); \
+void *ifunc_##name(void) \
+{ return primus.afns.handle ? real_dlsym(primus.afns.handle, #name) : (void*)l##name; }
 #include "gl-passthru.def"
 #undef DEF_GLX_PROTO
 
@@ -882,9 +882,10 @@ const char *glXQueryExtensionsString(Display *dpy, int screen)
 
 // OpenGL extension forwarders
 #define P(name) \
-void ifunc_##name(void) asm(#name) __attribute__((visibility("default"),ifunc("i" #name))); \
-extern "C" { static void *i##name(void) \
-{ return primus.afns.handle ? real_dlsym(primus.afns.handle, #name) : NULL; } }
+asm(".type " #name ", @gnu_indirect_function"); \
+void *ifunc_##name(void) asm(#name) __attribute__((visibility("default"))); \
+void *ifunc_##name(void) \
+{ return primus.afns.handle ? real_dlsym(primus.afns.handle, #name) : NULL; }
 #include "glext-passthru.def"
 #undef P
 #endif
