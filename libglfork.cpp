@@ -249,7 +249,7 @@ static struct PrimusInfo {
     die_if(!needed_global, "failed to load PRIMUS_LOAD_GLOBAL\n");
     int ncfg, attrs[] = {GLX_DOUBLEBUFFER, GL_TRUE, None};
     dconfigs = dfns.glXChooseFBConfig(ddpy, 0, attrs, &ncfg);
-    assert(ncfg);
+    die_if(!ncfg, "broken GLX on main X display\n");
   }
 } primus;
 
