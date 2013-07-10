@@ -245,6 +245,7 @@ static struct PrimusInfo {
     dfns(getconf(PRIMUS_libGLd))
   {
     die_if(!adpy, "failed to open secondary X display\n");
+    die_if(!ddpy, "failed to open main X display\n");
     die_if(!needed_global, "failed to load PRIMUS_LOAD_GLOBAL\n");
     int ncfg, attrs[] = {GLX_DOUBLEBUFFER, GL_TRUE, None};
     dconfigs = dfns.glXChooseFBConfig(ddpy, 0, attrs, &ncfg);
