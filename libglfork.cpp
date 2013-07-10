@@ -158,7 +158,7 @@ struct ContextsInfo: public std::map<GLXContext, ContextInfo> {
 
 // Runs before all other initialization takes place
 struct EarlyInitializer {
-  EarlyInitializer()
+  EarlyInitializer(const char **adpy_strp, const char **libgla_strp)
   {
 #ifdef BUMBLEBEE_SOCKET
     // Signal the Bumblebee daemon to bring up secondary X
@@ -176,7 +176,7 @@ struct EarlyInitializer {
       recv(sock, &c, 255, 0);
       die_if(memcmp(c, "Value: ", strlen("Value: ")), "unexpected query response\n");
       *strchrnul(c, '\n') = 0;
-      setenv("PRIMUS_DISPLAY", c + 7, 1);
+      *adpy_strp = strdup(c + 7);
     }
     if (!getenv("PRIMUS_libGLa"))
     {
@@ -194,8 +194,7 @@ struct EarlyInitializer {
 	  n = strchrnul(p + 1, ':');
 	  b += sprintf(b, "%.*s/libGL.so.1", (int)(n - p), p);
 	}
-	setenv("PRIMUS_libGLa", bblibs, 1);
-	delete[] bblibs;
+	*libgla_strp = bblibs;
       }
     }
     send(sock, "C", 1, 0);
@@ -211,6 +210,7 @@ struct EarlyInitializer {
 
 // Process-wide data
 static struct PrimusInfo {
+  const char *adpy_str, *libgla_str;
   EarlyInitializer ei;
   // Readback-display synchronization method
   // 0: no sync, 1: D lags behind one frame, 2: fully synced
@@ -233,12 +233,15 @@ static struct PrimusInfo {
   GLXFBConfig *dconfigs;
 
   PrimusInfo():
+    adpy_str(getconf(PRIMUS_DISPLAY)),
+    libgla_str(getconf(PRIMUS_libGLa)),
+    ei(&adpy_str, &libgla_str),
     sync(atoi(getconf(PRIMUS_SYNC))),
     loglevel(atoi(getconf(PRIMUS_VERBOSE))),
-    adpy(XOpenDisplay(getconf(PRIMUS_DISPLAY))),
+    adpy(XOpenDisplay(adpy_str)),
     ddpy(XOpenDisplay(NULL)),
     needed_global(dlopen(getconf(PRIMUS_LOAD_GLOBAL), RTLD_LAZY | RTLD_GLOBAL)),
-    afns(getconf(PRIMUS_libGLa)),
+    afns(libgla_str),
     dfns(getconf(PRIMUS_libGLd))
   {
     die_if(!adpy, "failed to open secondary X display\n");
