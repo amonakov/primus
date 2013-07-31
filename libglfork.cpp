@@ -126,7 +126,8 @@ struct DrawableInfo {
   void todo_resize(int width, int height)
   {
     this->width = width; this->height = height;
-    reinit = RESIZE; // FIXME: memory ordering
+    __sync_synchronize();
+    reinit = RESIZE;
   }
   ~DrawableInfo();
 };
@@ -617,6 +618,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   if (di.reinit == di.RESIZE)
   {
+    __sync_synchronize();
     primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
     di.pbuffer = create_pbuffer(di);
     if (ctx) // FIXME: drawable can be current in other threads
