@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cassert>
 #include <map>
+#include <string>
 #include <X11/Xatom.h>
 #pragma GCC visibility push(default)
 #define GLX_GLXEXT_PROTOTYPES
@@ -864,20 +865,41 @@ __GLXextFuncPtr glXGetProcAddressARB(const GLubyte *procName)
   return glXGetProcAddress(procName);
 }
 
+static const char glxext_clientside[] = "GLX_ARB_get_proc_address ";
+static const char glxext_adpy[] = "";
+static const char glxext_ddpy[] = "";
+
 const char *glXGetClientString(Display *dpy, int name)
 {
+  static std::string exts(std::string(glxext_clientside) + glxext_adpy + glxext_ddpy);
   switch (name)
   {
     case GLX_VENDOR: return "primus";
     case GLX_VERSION: return "1.4";
-    case GLX_EXTENSIONS: return "GLX_ARB_get_proc_address ";
+    case GLX_EXTENSIONS: return exts.c_str();
     default: return NULL;
   }
 }
 
+static std::string intersect_exts(const char *set1, const char *set2)
+{
+  std::string r;
+  for (const char *p; *set1; set1 = p + 1)
+  {
+    p = strchr(set1, ' ');
+    if (memmem(set2, strlen(set2), set1, p - set1))
+      r.append(set1, p - set1 + 1);
+  }
+  return r;
+}
+
 const char *glXQueryExtensionsString(Display *dpy, int screen)
 {
-  return "GLX_ARB_get_proc_address ";
+  static std::string exts
+    (std::string(glxext_clientside)
+     + intersect_exts(glxext_adpy, primus.afns.glXQueryExtensionsString(primus.adpy, 0))
+     + intersect_exts(glxext_ddpy, primus.dfns.glXQueryExtensionsString(primus.ddpy, 0)));
+  return exts.c_str();
 }
 
 // OpenGL ABI specifies that anything above OpenGL 1.2 + ARB_multitexture must
