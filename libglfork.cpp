@@ -524,6 +524,13 @@ GLXContext glXCreateNewContext(Display *dpy, GLXFBConfig config, int renderType,
   return actx;
 }
 
+GLXContext glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config, GLXContext shareList, Bool direct, const int *attrib_list)
+{
+  GLXContext actx = primus.afns.glXCreateContextAttribsARB(primus.adpy, config, shareList, direct, attrib_list);
+  primus.contexts.record(actx, config, shareList);
+  return actx;
+}
+
 void glXDestroyContext(Display *dpy, GLXContext ctx)
 {
   primus.contexts.erase(ctx);
@@ -866,7 +873,7 @@ __GLXextFuncPtr glXGetProcAddressARB(const GLubyte *procName)
 }
 
 static const char glxext_clientside[] = "GLX_ARB_get_proc_address ";
-static const char glxext_adpy[] = "";
+static const char glxext_adpy[] = "GLX_ARB_create_context GLX_ARB_create_context_profile ";
 static const char glxext_ddpy[] = "";
 
 const char *glXGetClientString(Display *dpy, int name)

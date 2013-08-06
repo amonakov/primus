@@ -1,2 +1,3 @@
 // GLX extension functions implemented in primus
 DEF_GLX_PROTO(int,          glXSwapIntervalSGI,       (int interval))
+DEF_GLX_PROTO(GLXContext,   glXCreateContextAttribsARB,(Display *dpy, GLXFBConfig config, GLXContext shareList, Bool direct, const int *attrib_list))
