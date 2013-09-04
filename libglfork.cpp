@@ -638,7 +638,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
-  GLXWindow glxwin = primus.dfns.glXCreateWindow(primus.ddpy, primus.dconfigs[0], win, attribList);
+  GLXWindow glxwin = primus.dfns.glXCreateWindow(dpy, primus.dconfigs[0], win, attribList);
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
   di.fbconfig = config;
@@ -658,7 +658,7 @@ void glXDestroyWindow(Display *dpy, GLXWindow window)
 {
   assert(primus.drawables.known(window));
   primus.drawables.erase(window);
-  primus.dfns.glXDestroyWindow(primus.ddpy, window);
+  primus.dfns.glXDestroyWindow(dpy, window);
 }
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
