@@ -663,7 +663,7 @@ void glXDestroyWindow(Display *dpy, GLXWindow window)
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
 {
-  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(primus.ddpy, primus.dconfigs[0], attribList);
+  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, primus.dconfigs[0], attribList);
   DrawableInfo &di = primus.drawables[pbuffer];
   di.kind = di.Pbuffer;
   di.fbconfig = config;
@@ -679,7 +679,7 @@ void glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf)
 {
   assert(primus.drawables.known(pbuf));
   primus.drawables.erase(pbuf);
-  primus.dfns.glXDestroyPbuffer(primus.ddpy, pbuf);
+  primus.dfns.glXDestroyPbuffer(dpy, pbuf);
 }
 
 GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList)
@@ -701,7 +701,7 @@ void glXDestroyPixmap(Display *dpy, GLXPixmap pixmap)
 
 GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
 {
-  GLXPixmap glxpix = primus.dfns.glXCreateGLXPixmap(primus.ddpy, visual, pixmap);
+  GLXPixmap glxpix = primus.dfns.glXCreateGLXPixmap(dpy, visual, pixmap);
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   note_geometry(dpy, pixmap, &di.width, &di.height);
@@ -712,7 +712,7 @@ GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
 
 void glXDestroyGLXPixmap(Display *dpy, GLXPixmap pixmap)
 {
-  glXDestroyPixmap(primus.ddpy, pixmap);
+  glXDestroyPixmap(dpy, pixmap);
 }
 
 static XVisualInfo *match_visual(int attrs[])
