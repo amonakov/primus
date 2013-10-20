@@ -379,14 +379,14 @@ static void* display_work(void *vd)
       primus.dfns.glViewport(0, 0, width, height);
       primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex ^ 1]);
       primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
       primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex]);
       primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
       sem_post(&di.d.relsem);
       continue;
     }
-    primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, di.pixeldata);
+    primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, di.pixeldata);
     if (!primus.sync)
       sem_post(&di.d.relsem); // Unlock as soon as possible
     profiler.tick();
@@ -466,7 +466,7 @@ static void* readback_work(void *vd)
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
     }
     primus.afns.glWaitSync(di.sync, 0, GL_TIMEOUT_IGNORED);
-    primus.afns.glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+    primus.afns.glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
     if (!primus.sync)
       sem_post(&di.r.relsem); // Unblock main thread as soon as possible
     if (primus.sync == 1) // Get the previous framebuffer
