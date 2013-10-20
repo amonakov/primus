@@ -338,7 +338,7 @@ static void* display_work(void *vd)
   DrawableInfo &di = primus.drawables[drawable];
   int width, height;
   static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
-	       float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
+  static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
   GLuint textures[2] = {0};
   int ctex = 0;
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
@@ -357,7 +357,7 @@ static void* display_work(void *vd)
   primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
   primus.dfns.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
   primus.dfns.glGenTextures(2, textures);
-  primus.dfns.glEnable(GL_TEXTURE_RECTANGLE);
+  primus.dfns.glEnable(GL_TEXTURE_2D);
   for (;;)
   {
     sem_wait(&di.d.acqsem);
@@ -374,17 +374,19 @@ static void* display_work(void *vd)
 	return NULL;
       }
       di.d.reinit = di.NONE;
-      quad_texture_coords[4] = quad_texture_coords[6] = profiler.width = width = di.width;
-      quad_texture_coords[3] = quad_texture_coords[5] = profiler.height = height = di.height;
+      profiler.width = width = di.width;
+      profiler.height = height = di.height;
       primus.dfns.glViewport(0, 0, width, height);
-      primus.dfns.glBindTexture(GL_TEXTURE_RECTANGLE, textures[ctex ^ 1]);
-      primus.dfns.glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
-      primus.dfns.glBindTexture(GL_TEXTURE_RECTANGLE, textures[ctex]);
-      primus.dfns.glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+      primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex ^ 1]);
+      primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+      primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex]);
+      primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
       sem_post(&di.d.relsem);
       continue;
     }
-    primus.dfns.glTexSubImage2D(GL_TEXTURE_RECTANGLE, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, di.pixeldata);
+    primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, di.pixeldata);
     if (!primus.sync)
       sem_post(&di.d.relsem); // Unlock as soon as possible
     profiler.tick();
@@ -397,7 +399,7 @@ static void* display_work(void *vd)
     }
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     primus.dfns.glXSwapBuffers(ddpy, di.window);
-    primus.dfns.glBindTexture(GL_TEXTURE_RECTANGLE, textures[ctex ^= 1]);
+    primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex ^= 1]);
     if (primus.sync)
       sem_post(&di.d.relsem); // Unlock only after drawing
     profiler.tick();
