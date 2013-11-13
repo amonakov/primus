@@ -599,6 +599,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
 
 void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 {
+  XFlush(dpy);
   assert(primus.drawables.known(drawable));
   DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer || di.kind == di.Pixmap)
