@@ -277,6 +277,14 @@ class Profiler {
   double *state_time;
   double prev_timestamp, print_timestamp;
   int nframes;
+
+  double get_timestamp()
+  {
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    return tp.tv_sec + 1e-9 * tp.tv_nsec;
+  }
+
 public:
   Profiler(const char *name, const char * const *state_names):
     name(name),
@@ -286,11 +294,7 @@ public:
     while (state_names[nstates]) ++nstates; // count number of states
     state_time = new double[nstates];
     memset(state_time, 0, sizeof(double)*nstates);
-    // reset time data
-    struct timespec tp;
-    clock_gettime(CLOCK_MONOTONIC, &tp);
-    double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
-    prev_timestamp = print_timestamp = timestamp;
+    prev_timestamp = print_timestamp = get_timestamp();
   }
   ~Profiler()
   {
@@ -298,10 +302,7 @@ public:
   }
   void tick(bool state_reset = false)
   {
-    // update times
-    struct timespec tp;
-    clock_gettime(CLOCK_MONOTONIC, &tp);
-    double timestamp = tp.tv_sec + 1e-9 * tp.tv_nsec;
+    double timestamp = get_timestamp();
     if (state_reset)
       state = 0;
     state_time[state] += timestamp - prev_timestamp;
