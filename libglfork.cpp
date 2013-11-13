@@ -268,14 +268,12 @@ static __thread struct {
 } tsdata;
 
 // Profiler
-class Profiler {
+struct Profiler {
   const char *name;
   const char * const *state_names;
 
-  int state;
-  double state_time[6];
-  double prev_timestamp, print_timestamp;
-  int nframes;
+  double state_time[6], prev_timestamp, print_timestamp;
+  int state, nframes, width, height;
 
   double get_timestamp()
   {
@@ -284,11 +282,10 @@ class Profiler {
     return tp.tv_sec + 1e-9 * tp.tv_nsec;
   }
 
-public:
   Profiler(const char *name, const char * const *state_names):
     name(name),
     state_names(state_names),
-    state(0), nframes(0)
+    state(0), nframes(0), width(0), height(0)
   {
     memset(state_time, 0, sizeof(state_time));
     prev_timestamp = print_timestamp = get_timestamp();
@@ -296,6 +293,8 @@ public:
 
   void tick(bool state_reset = false)
   {
+    if (primus.loglevel < 2)
+      return;
     double timestamp = get_timestamp();
     assert(state_reset || state_names[state]);
     if (state_reset)
@@ -311,10 +310,10 @@ public:
     if (period < 5)
       return;
     // construct output
-    char buf[64], *cbuf = buf, *end = buf+64;
+    char buf[128], *cbuf = buf, *end = buf+128;
     for (int i = 0; i < state; i++)
       cbuf += snprintf(cbuf, end - cbuf, ", %.1f%% %s", 100 * state_time[i] / period, state_names[i]);
-    primus_perf("%s: %.1f fps%s\n", name, nframes / period, buf);
+    primus_perf("%s: %dx%d, %.1f fps%s\n", name, width, height, nframes / period, buf);
     // start counting again
     print_timestamp = timestamp;
     nframes = 0;
@@ -374,8 +373,8 @@ static void* display_work(void *vd)
 	return NULL;
       }
       di.d.reinit = di.NONE;
-      quad_texture_coords[4] = quad_texture_coords[6] = width = di.width;
-      quad_texture_coords[3] = quad_texture_coords[5] = height = di.height;
+      quad_texture_coords[4] = quad_texture_coords[6] = profiler.width = width = di.width;
+      quad_texture_coords[3] = quad_texture_coords[5] = profiler.height = height = di.height;
       primus.dfns.glViewport(0, 0, width, height);
       primus.dfns.glBindTexture(GL_TEXTURE_RECTANGLE, textures[ctex ^ 1]);
       primus.dfns.glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
@@ -455,7 +454,8 @@ static void* readback_work(void *vd)
 	return NULL;
       }
       di.r.reinit = di.NONE;
-      width = di.width; height = di.height;
+      profiler.width = width = di.width;
+      profiler.height = height = di.height;
       primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, context);
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
       primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
