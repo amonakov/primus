@@ -271,10 +271,9 @@ static __thread struct {
 class Profiler {
   const char *name;
   const char * const *state_names;
-  int nstates;
 
   int state;
-  double *state_time;
+  double state_time[6];
   double prev_timestamp, print_timestamp;
   int nframes;
 
@@ -289,39 +288,37 @@ public:
   Profiler(const char *name, const char * const *state_names):
     name(name),
     state_names(state_names),
-    nstates(0), state(0), nframes(0)
+    state(0), nframes(0)
   {
-    while (state_names[nstates]) ++nstates; // count number of states
-    state_time = new double[nstates];
-    memset(state_time, 0, sizeof(double)*nstates);
+    memset(state_time, 0, sizeof(state_time));
     prev_timestamp = print_timestamp = get_timestamp();
   }
-  ~Profiler()
-  {
-    delete [] state_time;
-  }
+
   void tick(bool state_reset = false)
   {
     double timestamp = get_timestamp();
+    assert(state_reset || state_names[state]);
     if (state_reset)
       state = 0;
-    state_time[state] += timestamp - prev_timestamp;
-    state = (state + 1) % nstates;
+    assert(state * sizeof(state_time[0]) < sizeof(state_time));
+    state_time[state++] += timestamp - prev_timestamp;
     prev_timestamp = timestamp;
-    nframes += !!(state == 0);
+    if (state_names[state])
+      return;
+    nframes++;
     // check if it's time to print again
     double period = timestamp - print_timestamp; // time since we printed
-    if (state != 0 || period < 5)
+    if (period < 5)
       return;
     // construct output
     char buf[64], *cbuf = buf, *end = buf+64;
-    for (int i = 0; i < nstates; i++)
+    for (int i = 0; i < state; i++)
       cbuf += snprintf(cbuf, end - cbuf, ", %.1f%% %s", 100 * state_time[i] / period, state_names[i]);
     primus_perf("%s: %.1f fps%s\n", name, nframes / period, buf);
     // start counting again
     print_timestamp = timestamp;
     nframes = 0;
-    memset(state_time, 0, sizeof(double)*nstates);
+    memset(state_time, 0, sizeof(state_time));
   }
 };
 
