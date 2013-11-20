@@ -556,9 +556,20 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
   if (!known)
   {
     // Drawable is a plain X Window. Get the FBConfig from the context
-    assert(ctx);
+    if (ctx)
+      di.fbconfig = primus.contexts[ctx].fbconfig;
+    else
+    {
+      XWindowAttributes attrs;
+      die_if(!XGetWindowAttributes(dpy, draw, &attrs), "failed to query attributes");
+      int nvis;
+      XVisualInfo tmpl = {0}, *vis;
+      tmpl.visualid = XVisualIDFromVisual(attrs.visual);
+      die_if(!(vis = XGetVisualInfo(dpy, VisualIDMask, &tmpl, &nvis)), "no visuals");
+      di.fbconfig = *match_fbconfig(vis);
+      XFree(vis);
+    }
     di.kind = di.XWindow;
-    di.fbconfig = primus.contexts[ctx].fbconfig;
     di.window = draw;
     note_geometry(dpy, draw, &di.width, &di.height);
   }
@@ -758,7 +769,6 @@ int glXGetFBConfigAttrib(Display *dpy, GLXFBConfig config, int attribute, int *v
 
 void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned int *value)
 {
-  assert(primus.drawables.known(draw));
   primus.afns.glXQueryDrawable(primus.adpy, lookup_pbuffer(dpy, draw, NULL), attribute, value);
 }
 
