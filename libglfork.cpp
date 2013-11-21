@@ -124,8 +124,10 @@ struct DrawableInfo {
       d.reap_worker();
     }
   }
-  void todo_resize(int width, int height)
+  void update_geometry(int width, int height)
   {
+    if (this->width == width && this->height == height)
+      return;
     this->width = width; this->height = height;
     __sync_synchronize();
     reinit = RESIZE;
@@ -345,8 +347,7 @@ static void* display_work(void *vd)
   assert(di.kind == di.XWindow || di.kind == di.Window);
   XSelectInput(ddpy, di.window, StructureNotifyMask);
   note_geometry(ddpy, di.window, &width, &height);
-  if (width != di.width || height != di.height)
-    di.todo_resize(width, height);
+  di.update_geometry(width, height);
   GLXContext context = primus.dfns.glXCreateNewContext(ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
   die_if(!primus.dfns.glXIsDirect(ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
@@ -392,7 +393,7 @@ static void* display_work(void *vd)
       XEvent event;
       XNextEvent(ddpy, &event);
       if (event.type == ConfigureNotify)
-	di.todo_resize(event.xconfigure.width, event.xconfigure.height);
+	di.update_geometry(event.xconfigure.width, event.xconfigure.height);
     }
     primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
     primus.dfns.glXSwapBuffers(ddpy, di.window);
