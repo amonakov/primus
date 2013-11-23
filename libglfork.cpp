@@ -261,11 +261,13 @@ static struct PrimusInfo {
 static __thread struct {
   Display *dpy;
   GLXDrawable drawable, read_drawable;
-  void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read)
+  GLXContext ctx;
+  void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext ctx)
   {
     this->dpy = dpy;
     this->drawable = draw;
     this->read_drawable = read;
+    this->ctx = ctx;
   }
 } tsdata;
 
@@ -595,7 +597,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
 Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
 {
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
-  tsdata.make_current(dpy, drawable, drawable);
+  tsdata.make_current(dpy, drawable, drawable, ctx);
   return primus.afns.glXMakeCurrent(primus.adpy, pbuffer, ctx);
 }
 
@@ -605,7 +607,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
     return glXMakeCurrent(dpy, draw, ctx);
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
-  tsdata.make_current(dpy, draw, read);
+  tsdata.make_current(dpy, draw, read, ctx);
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
 
@@ -616,7 +618,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   DrawableInfo &di = primus.drawables[drawable];
   if (di.kind == di.Pbuffer || di.kind == di.Pixmap)
     return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
-  GLXContext ctx = glXGetCurrentContext();
+  GLXContext ctx = tsdata.ctx;
   if (!ctx)
     primus_warn("glXSwapBuffers: no current context\n");
   if (di.r.worker && di.actx && ctx && primus.contexts[di.actx].sharegroup != primus.contexts[ctx].sharegroup)
@@ -790,7 +792,7 @@ void glXUseXFont(Font font, int first, int count, int list)
 
 GLXContext glXGetCurrentContext(void)
 {
-  return primus.afns.glXGetCurrentContext();
+  return tsdata.ctx;
 }
 
 GLXDrawable glXGetCurrentDrawable(void)
