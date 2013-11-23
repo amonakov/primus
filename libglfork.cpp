@@ -619,7 +619,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   GLXContext ctx = glXGetCurrentContext();
   if (!ctx)
     primus_warn("glXSwapBuffers: no current context\n");
-  if (di.r.worker && di.actx && ctx && primus.contexts[di.actx].sharegroup != primus.contexts[ctx].sharegroup)
+  if (di.r.worker && ctx && (!di.actx || primus.contexts[di.actx].sharegroup != primus.contexts[ctx].sharegroup))
   {
     primus_warn("glXSwapBuffers: respawning threads after context change\n");
     di.reap_workers();
