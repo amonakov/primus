@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <time.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
@@ -472,6 +473,13 @@ static void* display_work(void *vd)
   return NULL;
 }
 
+static unsigned adjust_sleep(unsigned sleep_time, unsigned map_time)
+{
+  map_time += sleep_time;
+  unsigned low = map_time * 8/10, high = map_time * 9/10;
+  return sleep_time < low ? low : sleep_time > high ? high : sleep_time;
+}
+
 static void* readback_work(void *vd)
 {
   GLXDrawable drawable = (GLXDrawable)vd;
@@ -479,7 +487,8 @@ static void* readback_work(void *vd)
   int width, height;
   GLuint pbos[2] = {0};
   int cbuf = 0;
-  static const char *state_names[] = {"app", "map", "wait", NULL};
+  unsigned sleep_usec = 0;
+  static const char *state_names[] = {"app", "sleep", "map", "wait", NULL};
   Profiler profiler("readback", state_names);
   struct timespec tp;
   if (!primus.sync)
@@ -534,9 +543,14 @@ static void* readback_work(void *vd)
     primus.afns.glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
     if (!primus.sync)
       sem_post(&di.r.relsem); // Unblock main thread as soon as possible
+    usleep(sleep_usec);
+    profiler.tick();
     if (primus.sync == 1) // Get the previous framebuffer
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
+    double map_time = Profiler::get_timestamp();
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
+    map_time = Profiler::get_timestamp() - map_time;
+    sleep_usec = adjust_sleep(sleep_usec, map_time * 1e6);
     profiler.tick();
     clock_gettime(CLOCK_REALTIME, &tp);
     tp.tv_sec  += 1;
