@@ -8,6 +8,10 @@
 # 0: only errors, 1: warnings (default), 2: profiling
 # export PRIMUS_VERBOSE=${PRIMUS_VERBOSE:-1}
 
+# Upload/display method
+# 0: autodetect, 1: textures, 2: PBO/glDrawPixels (needs Mesa-10.1+)
+# export PRIMUS_UPLOAD=${PRIMUS_UPLOAD:-0}
+
 # Secondary display
 # export PRIMUS_DISPLAY=${PRIMUS_DISPLAY:-:8}
 
