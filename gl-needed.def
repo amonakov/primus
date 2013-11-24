@@ -3,6 +3,7 @@ DEF_GLX_PROTO(void,     glGenBuffers,    (GLsizei n, GLuint *buffers))
 DEF_GLX_PROTO(void,     glDeleteBuffers, (GLsizei n, const GLuint *buffers))
 DEF_GLX_PROTO(void,     glBindBuffer, (GLenum target, GLuint buffer))
 DEF_GLX_PROTO(void,     glBufferData, (GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage))
+DEF_GLX_PROTO(void,     glBufferSubData, (GLenum target, GLintptr offset, GLsizeiptr size, const GLvoid *data))
 DEF_GLX_PROTO(GLvoid*,  glMapBuffer,  (GLenum target, GLenum access))
 DEF_GLX_PROTO(GLboolean,glUnmapBuffer,(GLenum target))
 

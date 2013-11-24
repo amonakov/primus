@@ -221,6 +221,8 @@ static struct PrimusInfo {
   int sync;
   // 0: only errors, 1: warnings, 2: profiling
   int loglevel;
+  // 0: autodetect, 1: texture, 2: PBO glDrawPixels
+  int dispmethod;
   // The "accelerating" X display
   Display *adpy;
   // The "displaying" X display. The same as the application is using, but
@@ -242,6 +244,7 @@ static struct PrimusInfo {
     ei(&adpy_str, &libgla_str),
     sync(atoi(getconf(PRIMUS_SYNC))),
     loglevel(atoi(getconf(PRIMUS_VERBOSE))),
+    dispmethod(atoi(getconf(PRIMUS_UPLOAD))),
     adpy(XOpenDisplay(adpy_str)),
     ddpy(XOpenDisplay(NULL)),
     needed_global(dlopen(getconf(PRIMUS_LOAD_GLOBAL), RTLD_LAZY | RTLD_GLOBAL)),
@@ -277,7 +280,7 @@ struct Profiler {
   double state_time[6], prev_timestamp, print_timestamp;
   int state, nframes, width, height;
 
-  double get_timestamp()
+  static double get_timestamp()
   {
     struct timespec tp;
     clock_gettime(CLOCK_MONOTONIC, &tp);
@@ -332,6 +335,36 @@ static void note_geometry(Display *dpy, Drawable draw, int *width, int *height)
   XGetGeometry(dpy, draw, &root, &x, &y, (unsigned *)width, (unsigned *)height, &bw, &d);
 }
 
+static bool test_drawpixels_fast(Display *dpy, GLXContext ctx)
+{
+  int width = 2048, height = 1024;
+  int pbattrs[] = {GLX_PBUFFER_WIDTH, width, GLX_PBUFFER_HEIGHT, height, GLX_PRESERVED_CONTENTS, True, None};
+  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, primus.dconfigs[0], pbattrs);
+  primus.dfns.glXMakeCurrent(dpy, pbuffer, ctx);
+  GLuint pbo;
+  primus.dfns.glGenBuffers(1, &pbo);
+  primus.dfns.glBindBuffer(GL_PIXEL_UNPACK_BUFFER_EXT, pbo);
+  primus.dfns.glBufferData(GL_PIXEL_UNPACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_DRAW);
+  void *pixeldata = malloc(width*height*4);
+
+  double end = 0.2 + Profiler::get_timestamp();
+  int iters = 0;
+  do {
+    primus.dfns.glBufferSubData(GL_PIXEL_UNPACK_BUFFER_EXT, 0, width*height*4, pixeldata);
+    primus.dfns.glDrawPixels(width, height, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+    primus.dfns.glXSwapBuffers(dpy, pbuffer);
+    iters++;
+  } while (end > Profiler::get_timestamp());
+
+  free(pixeldata);
+  primus.dfns.glDeleteBuffers(1, &pbo);
+  primus.dfns.glXDestroyPbuffer(dpy, pbuffer);
+
+  bool is_fast = iters >= 15;
+  primus_perf("upload autodetection: will use %s path (%d iters)\n", is_fast ? "PBO" : "texture", iters);
+  return is_fast;
+}
+
 static void* display_work(void *vd)
 {
   GLXDrawable drawable = (GLXDrawable)vd;
@@ -339,7 +372,7 @@ static void* display_work(void *vd)
   int width, height;
   static const float quad_vertex_coords[]  = {-1, -1, -1, 1, 1, 1, 1, -1};
   static const float quad_texture_coords[] = { 0,  0,  0, 1, 1, 1, 1,  0};
-  GLuint textures[2] = {0};
+  GLuint textures[2] = {0}, pbos[2] = {0};
   int ctex = 0;
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
@@ -351,13 +384,21 @@ static void* display_work(void *vd)
   GLXContext context = primus.dfns.glXCreateNewContext(ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
   die_if(!primus.dfns.glXIsDirect(ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
+  if (!primus.dispmethod)
+    primus.dispmethod = test_drawpixels_fast(ddpy, context) ? 2 : 1;
   primus.dfns.glXMakeCurrent(ddpy, di.window, context);
-  primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
-  primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
-  primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
-  primus.dfns.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-  primus.dfns.glGenTextures(2, textures);
-  primus.dfns.glEnable(GL_TEXTURE_2D);
+  bool use_textures = (primus.dispmethod == 1);
+  if (use_textures)
+  {
+    primus.dfns.glVertexPointer  (2, GL_FLOAT, 0, quad_vertex_coords);
+    primus.dfns.glTexCoordPointer(2, GL_FLOAT, 0, quad_texture_coords);
+    primus.dfns.glEnableClientState(GL_VERTEX_ARRAY);
+    primus.dfns.glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    primus.dfns.glGenTextures(2, textures);
+    primus.dfns.glEnable(GL_TEXTURE_2D);
+  }
+  else
+    primus.dfns.glGenBuffers(2, pbos);
   for (;;)
   {
     sem_wait(&di.d.acqsem);
@@ -366,7 +407,10 @@ static void* display_work(void *vd)
     {
       if (di.d.reinit == di.SHUTDOWN)
       {
-	primus.dfns.glDeleteTextures(2, textures);
+	if (use_textures)
+	  primus.dfns.glDeleteTextures(2, textures);
+	else
+	  primus.dfns.glDeleteBuffers(2, pbos);
 	primus.dfns.glXMakeCurrent(ddpy, 0, NULL);
 	primus.dfns.glXDestroyContext(ddpy, context);
 	XCloseDisplay(ddpy);
@@ -377,19 +421,43 @@ static void* display_work(void *vd)
       profiler.width = width = di.width;
       profiler.height = height = di.height;
       primus.dfns.glViewport(0, 0, width, height);
-      primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex ^ 1]);
-      primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
-      primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex]);
-      primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+      if (use_textures)
+      {
+	primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex ^ 1]);
+	primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+	primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex]);
+	primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+      }
+      else
+      {
+	primus.dfns.glBindBuffer(GL_PIXEL_UNPACK_BUFFER_EXT, pbos[ctex ^ 1]);
+	primus.dfns.glBufferData(GL_PIXEL_UNPACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_DRAW);
+	primus.dfns.glBindBuffer(GL_PIXEL_UNPACK_BUFFER_EXT, pbos[ctex]);
+	primus.dfns.glBufferData(GL_PIXEL_UNPACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_DRAW);
+      }
       sem_post(&di.d.relsem);
       continue;
     }
-    primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, di.pixeldata);
+    if (use_textures)
+      primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, di.pixeldata);
+    else
+      primus.dfns.glBufferSubData(GL_PIXEL_UNPACK_BUFFER_EXT, 0, width*height*4, di.pixeldata);
     if (!primus.sync)
       sem_post(&di.d.relsem); // Unlock as soon as possible
     profiler.tick();
+    if (use_textures)
+    {
+      primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
+      primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex ^= 1]);
+    }
+    else
+    {
+      primus.dfns.glDrawPixels(width, height, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+      primus.dfns.glBindBuffer(GL_PIXEL_UNPACK_BUFFER_EXT, pbos[ctex ^= 1]);
+    }
+    primus.dfns.glXSwapBuffers(ddpy, di.window);
     for (int pending = XPending(ddpy); pending > 0; pending--)
     {
       XEvent event;
@@ -397,9 +465,6 @@ static void* display_work(void *vd)
       if (event.type == ConfigureNotify)
 	di.update_geometry(event.xconfigure.width, event.xconfigure.height);
     }
-    primus.dfns.glDrawArrays(GL_QUADS, 0, 4);
-    primus.dfns.glXSwapBuffers(ddpy, di.window);
-    primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex ^= 1]);
     if (primus.sync)
       sem_post(&di.d.relsem); // Unlock only after drawing
     profiler.tick();
