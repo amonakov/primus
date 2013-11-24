@@ -94,7 +94,7 @@ struct DrawableInfo {
 
   struct {
     pthread_t worker;
-    sem_t acqsem, relsem;
+    sem_t acqsem, relsem, cfgsem;
     ReinitTodo reinit;
 
     void spawn_worker(GLXDrawable draw, void* (*work)(void*))
@@ -102,24 +102,29 @@ struct DrawableInfo {
       reinit = RESIZE;
       sem_init(&acqsem, 0, 0);
       sem_init(&relsem, 0, 0);
+      sem_init(&cfgsem, 0, 0);
       pthread_create(&worker, NULL, work, (void*)draw);
     }
     void reap_worker()
     {
-      //pthread_cancel(worker);
       pthread_join(worker, NULL);
+      sem_destroy(&cfgsem);
       sem_destroy(&relsem);
       sem_destroy(&acqsem);
       worker = 0;
+    }
+    void wait_reinit(ReinitTodo reinit)
+    {
+      this->reinit = reinit;
+      sem_post(&acqsem);
+      sem_wait(&cfgsem);
     }
   } r, d;
   void reap_workers()
   {
     if (r.worker)
     {
-      r.reinit = SHUTDOWN;
-      sem_post(&r.acqsem);
-      sem_wait(&r.relsem);
+      r.wait_reinit(SHUTDOWN);
       r.reap_worker();
       d.reap_worker();
     }
@@ -375,7 +380,7 @@ static void* display_work(void *vd)
 	primus.dfns.glXMakeCurrent(ddpy, 0, NULL);
 	primus.dfns.glXDestroyContext(ddpy, context);
 	XCloseDisplay(ddpy);
-	sem_post(&di.d.relsem);
+	sem_post(&di.d.cfgsem);
 	return NULL;
       }
       di.d.reinit = di.NONE;
@@ -388,7 +393,7 @@ static void* display_work(void *vd)
       primus.dfns.glBindTexture(GL_TEXTURE_2D, textures[ctex]);
       primus.dfns.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       primus.dfns.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
-      sem_post(&di.d.relsem);
+      sem_post(&di.d.cfgsem);
       continue;
     }
     primus.dfns.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, di.pixeldata);
@@ -442,13 +447,11 @@ static void* readback_work(void *vd)
       if (!primus.sync && sem_timedwait(&di.d.relsem, &tp))
       {
 	pthread_cancel(di.d.worker);
-	sem_post(&di.d.relsem); // Pretend that D worker completed reinit
+	sem_post(&di.d.cfgsem); // Pretend that D worker completed reinit
 	primus_warn("timeout waiting for display worker\n");
 	die_if(di.r.reinit != di.SHUTDOWN, "killed worker on resize\n");
       }
-      di.d.reinit = di.r.reinit;
-      sem_post(&di.d.acqsem); // Signal D worker to reinit
-      sem_wait(&di.d.relsem); // Wait until reinit was completed
+      di.d.wait_reinit(di.r.reinit);
       if (!primus.sync)
 	sem_post(&di.d.relsem); // Unlock as no PBO is currently mapped
       if (di.r.reinit == di.SHUTDOWN)
@@ -458,7 +461,7 @@ static void* readback_work(void *vd)
 	primus.afns.glDeleteBuffers(2, &pbos[0]);
 	primus.afns.glXMakeCurrent(primus.adpy, 0, NULL);
 	primus.afns.glXDestroyContext(primus.adpy, context);
-	sem_post(&di.r.relsem);
+	sem_post(&di.r.cfgsem);
 	return NULL;
       }
       di.r.reinit = di.NONE;
