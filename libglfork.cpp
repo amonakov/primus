@@ -260,13 +260,16 @@ static struct PrimusInfo {
 // Thread-specific data
 static __thread struct {
   Display *dpy;
-  GLXDrawable drawable, read_drawable;
+  GLXDrawable draw, read, pdraw, pread;
   GLXContext ctx;
-  void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXContext ctx)
+  void make_current(Display *dpy, GLXDrawable draw, GLXDrawable read,
+		    GLXDrawable pdraw, GLXDrawable pread, GLXContext ctx)
   {
     this->dpy = dpy;
-    this->drawable = draw;
-    this->read_drawable = read;
+    this->draw = draw;
+    this->read = read;
+    this->pdraw = pdraw;
+    this->pread = pread;
     this->ctx = ctx;
   }
 } tsdata;
@@ -597,7 +600,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
 Bool glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
 {
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, drawable, ctx);
-  tsdata.make_current(dpy, drawable, drawable, ctx);
+  tsdata.make_current(dpy, drawable, drawable, pbuffer, pbuffer, ctx);
   return primus.afns.glXMakeCurrent(primus.adpy, pbuffer, ctx);
 }
 
@@ -607,7 +610,7 @@ Bool glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLX
     return glXMakeCurrent(dpy, draw, ctx);
   GLXPbuffer pbuffer = lookup_pbuffer(dpy, draw, ctx);
   GLXPbuffer pb_read = lookup_pbuffer(dpy, read, ctx);
-  tsdata.make_current(dpy, draw, read, ctx);
+  tsdata.make_current(dpy, draw, read, pbuffer, pb_read, ctx);
   return primus.afns.glXMakeContextCurrent(primus.adpy, pbuffer, pb_read, ctx);
 }
 
@@ -645,7 +648,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
     primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
     di.pbuffer = create_pbuffer(di);
     if (ctx) // FIXME: drawable can be current in other threads
-      glXMakeContextCurrent(dpy, tsdata.drawable, tsdata.read_drawable, ctx);
+      glXMakeContextCurrent(dpy, tsdata.draw, tsdata.read, ctx);
     di.r.reinit = di.reinit;
     di.reinit = di.NONE;
   }
@@ -797,7 +800,7 @@ GLXContext glXGetCurrentContext(void)
 
 GLXDrawable glXGetCurrentDrawable(void)
 {
-  return tsdata.drawable;
+  return tsdata.draw;
 }
 
 void glXWaitGL(void)
@@ -815,7 +818,7 @@ Display *glXGetCurrentDisplay(void)
 
 GLXDrawable glXGetCurrentReadDrawable(void)
 {
-  return tsdata.read_drawable;
+  return tsdata.read;
 }
 
 // Application sees ddpy-side Visuals, but adpy-side FBConfigs and Contexts
