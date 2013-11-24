@@ -86,7 +86,7 @@ struct DrawableInfo {
   GLXFBConfig fbconfig;
   GLXPbuffer  pbuffer;
   Drawable window;
-  int width, height;
+  int width, height, next_width, next_height;
   enum ReinitTodo {NONE, RESIZE, SHUTDOWN} reinit;
   GLvoid *pixeldata;
   GLsync sync;
@@ -133,7 +133,7 @@ struct DrawableInfo {
   {
     if (this->width == width && this->height == height)
       return;
-    this->width = width; this->height = height;
+    this->next_width = width; this->next_height = height;
     __sync_synchronize();
     reinit = RESIZE;
   }
@@ -648,9 +648,10 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   {
     __sync_synchronize();
     primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
+    di.width = di.next_width; di.height = di.next_height;
     di.pbuffer = create_pbuffer(di);
     if (ctx) // FIXME: drawable can be current in other threads
-      glXMakeContextCurrent(dpy, tsdata.draw, tsdata.read, ctx);
+      glXMakeContextCurrent(tsdata.dpy, tsdata.draw, tsdata.read, ctx);
     di.r.reinit = di.reinit;
     di.reinit = di.NONE;
   }
