@@ -89,8 +89,8 @@ struct DrawableInfo {
   int width, height, next_width, next_height;
   enum ReinitTodo {NONE, RESIZE, SHUTDOWN} reinit;
   GLvoid *pixeldata;
-  GLsync sync;
-  GLXContext actx;
+  GLuint pbo;
+  GLXContext actx, rctx;
 
   struct {
     pthread_t worker;
@@ -458,6 +458,7 @@ static void* readback_work(void *vd)
 	primus.afns.glDeleteBuffers(3, &pbos[0]);
 	primus.afns.glXMakeCurrent(primus.adpy, 0, NULL);
 	primus.afns.glXDestroyContext(primus.adpy, context);
+	primus.afns.glXDestroyContext(primus.adpy, di.rctx);
 	sem_post(&di.r.cfgsem);
 	return NULL;
       }
@@ -470,9 +471,11 @@ static void* readback_work(void *vd)
 	primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[--cbuf]);
 	primus.afns.glBufferData(GL_PIXEL_PACK_BUFFER_EXT, width*height*4, NULL, GL_STREAM_READ);
       }
+      di.pbo = pbos[cbuf];
+      sem_post(&di.r.cfgsem);
+      continue;
     }
-    primus.afns.glWaitSync(di.sync, 0, GL_TIMEOUT_IGNORED);
-    primus.afns.glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+    di.pbo = pbos[(cbuf + 1) % 3];
     if (!primus.sync)
       sem_post(&di.r.relsem); // Unblock main thread as soon as possible
     if (primus.sync == 1) // Get the previous framebuffer
@@ -637,26 +640,40 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   {
     // Need to create a sharing context to use GL sync objects
     di.actx = ctx;
+    di.rctx = primus.afns.glXCreateNewContext(primus.adpy, di.fbconfig, GLX_RGBA_TYPE, ctx, True);
     di.d.spawn_worker(drawable, display_work);
     di.r.spawn_worker(drawable, readback_work);
+    di.r.wait_reinit(di.RESIZE);
+    if (!primus.sync)
+      sem_post(&di.r.relsem);
   }
-  // Readback thread needs a sync object to avoid reading an incomplete frame
-  di.sync = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  // Readback context needs a sync object to avoid reading an incomplete frame
+  GLsync fence = primus.afns.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, di.rctx);
+  primus.afns.glWaitSync(fence, 0, GL_TIMEOUT_IGNORED);
+  if (!primus.sync)
+    sem_wait(&di.r.relsem);
+  primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, di.pbo);
+  primus.afns.glReadPixels(0, 0, di.width, di.height, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
   sem_post(&di.r.acqsem); // Signal the readback worker thread
-  sem_wait(&di.r.relsem); // Wait until it has issued glReadBuffer
-  primus.afns.glDeleteSync(di.sync);
+  primus.afns.glDeleteSync(fence);
+  primus.afns.glXMakeContextCurrent(primus.adpy, tsdata.pdraw, tsdata.pread, ctx);
   primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   if (di.reinit == di.RESIZE)
   {
+    sem_wait(&di.r.relsem);
     __sync_synchronize();
     primus.afns.glXDestroyPbuffer(primus.adpy, di.pbuffer);
     di.width = di.next_width; di.height = di.next_height;
     di.pbuffer = create_pbuffer(di);
     if (ctx) // FIXME: drawable can be current in other threads
       glXMakeContextCurrent(tsdata.dpy, tsdata.draw, tsdata.read, ctx);
-    di.r.reinit = di.reinit;
+    di.r.wait_reinit(di.reinit);
     di.reinit = di.NONE;
+    sem_post(&di.r.relsem);
   }
+  if (primus.sync)
+    sem_wait(&di.r.relsem);
 }
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
