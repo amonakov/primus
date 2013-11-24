@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <time.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
@@ -223,6 +224,8 @@ static struct PrimusInfo {
   int loglevel;
   // 0: autodetect, 1: texture, 2: PBO glDrawPixels
   int dispmethod;
+  // sleep ratio in readback thread, percent
+  int autosleep;
   // The "accelerating" X display
   Display *adpy;
   // The "displaying" X display. The same as the application is using, but
@@ -245,6 +248,7 @@ static struct PrimusInfo {
     sync(atoi(getconf(PRIMUS_SYNC))),
     loglevel(atoi(getconf(PRIMUS_VERBOSE))),
     dispmethod(atoi(getconf(PRIMUS_UPLOAD))),
+    autosleep(atoi(getconf(PRIMUS_SLEEP))),
     adpy(XOpenDisplay(adpy_str)),
     ddpy(XOpenDisplay(NULL)),
     needed_global(dlopen(getconf(PRIMUS_LOAD_GLOBAL), RTLD_LAZY | RTLD_GLOBAL)),
@@ -479,7 +483,8 @@ static void* readback_work(void *vd)
   int width, height;
   GLuint pbos[2] = {0};
   int cbuf = 0;
-  static const char *state_names[] = {"app", "map", "wait", NULL};
+  unsigned sleep_usec = 0;
+  static const char *state_names[] = {"app", "sleep", "map", "wait", NULL};
   Profiler profiler("readback", state_names);
   struct timespec tp;
   if (!primus.sync)
@@ -534,9 +539,14 @@ static void* readback_work(void *vd)
     primus.afns.glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
     if (!primus.sync)
       sem_post(&di.r.relsem); // Unblock main thread as soon as possible
+    usleep(sleep_usec);
+    profiler.tick();
     if (primus.sync == 1) // Get the previous framebuffer
       primus.afns.glBindBuffer(GL_PIXEL_PACK_BUFFER_EXT, pbos[cbuf ^ 1]);
+    double map_time = Profiler::get_timestamp();
     GLvoid *pixeldata = primus.afns.glMapBuffer(GL_PIXEL_PACK_BUFFER_EXT, GL_READ_ONLY);
+    map_time = Profiler::get_timestamp() - map_time;
+    sleep_usec = (map_time * 1e6 + sleep_usec) * primus.autosleep / 100;
     profiler.tick();
     clock_gettime(CLOCK_REALTIME, &tp);
     tp.tv_sec  += 1;

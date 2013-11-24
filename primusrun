@@ -12,6 +12,9 @@
 # 0: autodetect, 1: textures, 2: PBO/glDrawPixels (needs Mesa-10.1+)
 # export PRIMUS_UPLOAD=${PRIMUS_UPLOAD:-0}
 
+# Approximate sleep ratio in the readback thread, percent
+# export PRIMUS_SLEEP=${PRIMUS_SLEEP:-90}
+
 # Secondary display
 # export PRIMUS_DISPLAY=${PRIMUS_DISPLAY:-:8}
 
