@@ -494,7 +494,7 @@ static void* readback_work(void *vd)
 	 "failed to acquire direct rendering context for readback thread\n");
   primus.afns.glXMakeCurrent(primus.adpy, di.pbuffer, context);
   primus.afns.glGenBuffers(2, &pbos[0]);
-  primus.afns.glReadBuffer(GL_BACK);
+  primus.afns.glReadBuffer(GL_FRONT);
   for (;;)
   {
     sem_wait(&di.r.acqsem);
@@ -689,8 +689,9 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   XFlush(dpy);
   assert(primus.drawables.known(drawable));
   DrawableInfo &di = primus.drawables[drawable];
+  primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   if (di.kind == di.Pbuffer || di.kind == di.Pixmap)
-    return primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
+    return;
   GLXContext ctx = glXGetCurrentContext();
   if (!ctx)
     primus_warn("glXSwapBuffers: no current context\n");
@@ -713,7 +714,6 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
   sem_post(&di.r.acqsem); // Signal the readback worker thread
   sem_wait(&di.r.relsem); // Wait until it has issued glReadBuffer
   primus.afns.glDeleteSync(di.sync);
-  primus.afns.glXSwapBuffers(primus.adpy, di.pbuffer);
   if (di.reinit == di.RESIZE)
   {
     __sync_synchronize();
