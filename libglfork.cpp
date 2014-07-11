@@ -915,7 +915,7 @@ ret name par \
 #define DEF_GLX_PROTO(ret, name, par, ...) \
 static ret l##name par \
 { return primus.afns.name(__VA_ARGS__); } \
-asm(".type " #name ", @gnu_indirect_function"); \
+asm(".type " #name ", %gnu_indirect_function"); \
 void *ifunc_##name(void) asm(#name) __attribute__((visibility("default"))); \
 void *ifunc_##name(void) \
 { return primus.afns.handle ? real_dlsym(primus.afns.handle, #name) : (void*)l##name; }
@@ -1006,7 +1006,7 @@ const char *glXQueryExtensionsString(Display *dpy, int screen)
 
 // OpenGL extension forwarders
 #define P(name) \
-asm(".type " #name ", @gnu_indirect_function"); \
+asm(".type " #name ", %gnu_indirect_function"); \
 void *ifunc_##name(void) asm(#name) __attribute__((visibility("default"))); \
 void *ifunc_##name(void) \
 { return primus.afns.handle ? real_dlsym(primus.afns.handle, #name) : NULL; }
