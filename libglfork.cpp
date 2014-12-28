@@ -811,13 +811,13 @@ void glXDestroyGLXPixmap(Display *dpy, GLXPixmap pixmap)
   glXDestroyPixmap(dpy, pixmap);
 }
 
-static XVisualInfo *match_visual(int attrs[])
+static XVisualInfo *match_visual(Display *dpy, int attrs[])
 {
-  XVisualInfo *vis = glXChooseVisual(primus.ddpy, 0, attrs);
+  XVisualInfo *vis = glXChooseVisual(dpy, 0, attrs);
   for (int i = 2; attrs[i] != None && vis; i += 2)
   {
     int tmp = attrs[i+1];
-    primus.dfns.glXGetConfig(primus.ddpy, vis, attrs[i], &attrs[i+1]);
+    primus.dfns.glXGetConfig(dpy, vis, attrs[i], &attrs[i+1]);
     if (tmp != attrs[i+1])
       vis = NULL;
   }
@@ -839,7 +839,7 @@ XVisualInfo *glXGetVisualFromFBConfig(Display *dpy, GLXFBConfig config)
   XVisualInfo *vis = NULL;
   for (i -= 2; i >= 0 && !vis; i -= 2)
   {
-    vis = match_visual(attrs);
+    vis = match_visual(dpy, attrs);
     attrs[i] = None;
   }
   return vis;
