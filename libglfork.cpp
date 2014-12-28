@@ -849,7 +849,7 @@ int glXGetFBConfigAttrib(Display *dpy, GLXFBConfig config, int attribute, int *v
 {
   int r = primus.afns.glXGetFBConfigAttrib(primus.adpy, config, attribute, value);
   if (attribute == GLX_VISUAL_ID && *value)
-    return primus.dfns.glXGetConfig(primus.ddpy, glXGetVisualFromFBConfig(dpy, config), attribute, value);
+    return primus.dfns.glXGetConfig(dpy, glXGetVisualFromFBConfig(dpy, config), attribute, value);
   return r;
 }
 
@@ -861,9 +861,10 @@ void glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute, unsigned in
 void glXUseXFont(Font font, int first, int count, int list)
 {
   unsigned long prop;
-  XFontStruct *fs = XQueryFont(primus.ddpy, font);
+  Display *dpy = glXGetCurrentDisplay();
+  XFontStruct *fs = XQueryFont(dpy, font);
   XGetFontProperty(fs, XA_FONT, &prop);
-  char *xlfd = XGetAtomName(primus.ddpy, prop);
+  char *xlfd = XGetAtomName(dpy, prop);
   Font afont = XLoadFont(primus.adpy, xlfd);
   primus.afns.glXUseXFont(afont, first, count, list);
   XUnloadFont(primus.adpy, afont);
@@ -1000,7 +1001,7 @@ const char *glXQueryExtensionsString(Display *dpy, int screen)
   static std::string exts
     (std::string(glxext_clientside)
      + intersect_exts(glxext_adpy, primus.afns.glXQueryExtensionsString(primus.adpy, 0))
-     + intersect_exts(glxext_ddpy, primus.dfns.glXQueryExtensionsString(primus.ddpy, 0)));
+     + intersect_exts(glxext_ddpy, primus.dfns.glXQueryExtensionsString(dpy, 0)));
   return exts.c_str();
 }
 
