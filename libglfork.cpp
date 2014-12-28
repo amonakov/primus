@@ -381,6 +381,11 @@ static void* display_work(void *vd)
   static const char *state_names[] = {"wait", "upload", "draw+swap", NULL};
   Profiler profiler("display", state_names);
   Display *ddpy = XOpenDisplay(NULL);
+  if (!ddpy) // Chromium sandbox prevents opening new connections
+  {
+    ddpy = primus.ddpy;
+    primus_warn("reusing initial X connection for display thread\n");
+  }
   assert(di.kind == di.XWindow || di.kind == di.Window);
   XSelectInput(ddpy, di.window, StructureNotifyMask);
   note_geometry(ddpy, di.window, &width, &height);
@@ -417,7 +422,8 @@ static void* display_work(void *vd)
 	  primus.dfns.glDeleteBuffers(2, pbos);
 	primus.dfns.glXMakeCurrent(ddpy, 0, NULL);
 	primus.dfns.glXDestroyContext(ddpy, context);
-	XCloseDisplay(ddpy);
+	if (ddpy != primus.ddpy)
+	  XCloseDisplay(ddpy);
 	sem_post(&di.d.relsem);
 	return NULL;
       }
