@@ -239,7 +239,6 @@ static struct PrimusInfo {
   // FIXME: there are race conditions in accesses to these
   DrawablesInfo drawables;
   ContextsInfo contexts;
-  GLXFBConfig *dconfigs;
 
   PrimusInfo():
     adpy_str(getconf(PRIMUS_DISPLAY)),
@@ -258,9 +257,6 @@ static struct PrimusInfo {
     die_if(!adpy, "failed to open secondary X display\n");
     die_if(!ddpy, "failed to open main X display\n");
     die_if(!needed_global, "failed to load PRIMUS_LOAD_GLOBAL\n");
-    int ncfg, attrs[] = {GLX_DOUBLEBUFFER, GL_TRUE, None};
-    dconfigs = dfns.glXChooseFBConfig(ddpy, 0, attrs, &ncfg);
-    die_if(!ncfg, "broken GLX on main X display\n");
   }
 } primus;
 
@@ -339,11 +335,19 @@ static void note_geometry(Display *dpy, Drawable draw, int *width, int *height)
   XGetGeometry(dpy, draw, &root, &x, &y, (unsigned *)width, (unsigned *)height, &bw, &d);
 }
 
+static GLXFBConfig get_dconfig(Display *dpy)
+{
+  int ncfg, attrs[] = {GLX_DOUBLEBUFFER, GL_TRUE, None};
+  static GLXFBConfig *dconfigs = primus.dfns.glXChooseFBConfig(dpy, 0, attrs, &ncfg);
+  die_if(!dconfigs, "broken GLX on main X display\n");
+  return *dconfigs;
+}
+
 static bool test_drawpixels_fast(Display *dpy, GLXContext ctx)
 {
   int width = 1920, height = 1080;
   int pbattrs[] = {GLX_PBUFFER_WIDTH, width, GLX_PBUFFER_HEIGHT, height, GLX_PRESERVED_CONTENTS, True, None};
-  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, primus.dconfigs[0], pbattrs);
+  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, get_dconfig(dpy), pbattrs);
   primus.dfns.glXMakeCurrent(dpy, pbuffer, ctx);
   GLuint pbo;
   primus.dfns.glGenBuffers(1, &pbo);
@@ -390,7 +394,7 @@ static void* display_work(void *vd)
   XSelectInput(ddpy, di.window, StructureNotifyMask);
   note_geometry(ddpy, di.window, &width, &height);
   di.update_geometry(width, height);
-  GLXContext context = primus.dfns.glXCreateNewContext(ddpy, primus.dconfigs[0], GLX_RGBA_TYPE, NULL, True);
+  GLXContext context = primus.dfns.glXCreateNewContext(ddpy, get_dconfig(ddpy), GLX_RGBA_TYPE, NULL, True);
   die_if(!primus.dfns.glXIsDirect(ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
   if (!primus.dispmethod)
@@ -734,7 +738,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
-  GLXWindow glxwin = primus.dfns.glXCreateWindow(dpy, primus.dconfigs[0], win, attribList);
+  GLXWindow glxwin = primus.dfns.glXCreateWindow(dpy, get_dconfig(dpy), win, attribList);
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
   di.fbconfig = config;
@@ -759,7 +763,7 @@ void glXDestroyWindow(Display *dpy, GLXWindow window)
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
 {
-  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, primus.dconfigs[0], attribList);
+  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, get_dconfig(dpy), attribList);
   DrawableInfo &di = primus.drawables[pbuffer];
   di.kind = di.Pbuffer;
   di.fbconfig = config;
@@ -780,7 +784,7 @@ void glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf)
 
 GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList)
 {
-  GLXPixmap glxpix = primus.dfns.glXCreatePixmap(dpy, primus.dconfigs[0], pixmap, attribList);
+  GLXPixmap glxpix = primus.dfns.glXCreatePixmap(dpy, get_dconfig(dpy), pixmap, attribList);
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   di.fbconfig = config;
