@@ -577,7 +577,7 @@ static void* readback_work(void *vd)
 }
 
 // Find appropriate FBConfigs on adpy for a given Visual on ddpy
-static GLXFBConfig* match_fbconfig(XVisualInfo *vis)
+static GLXFBConfig* match_fbconfig(Display *dpy, XVisualInfo *vis)
 {
   int ncfg, attrs[] = {
     GLX_DOUBLEBUFFER, 0, GLX_STEREO, 0, GLX_AUX_BUFFERS, 0,
@@ -587,13 +587,13 @@ static GLXFBConfig* match_fbconfig(XVisualInfo *vis)
     GLX_SAMPLE_BUFFERS, 0, GLX_SAMPLES, 0, None
   };
   for (int i = 0; attrs[i] != None; i += 2)
-    primus.dfns.glXGetConfig(primus.ddpy, vis, attrs[i], &attrs[i+1]);
+    primus.dfns.glXGetConfig(dpy, vis, attrs[i], &attrs[i+1]);
   return primus.afns.glXChooseFBConfig(primus.adpy, 0, attrs, &ncfg);
 }
 
 GLXContext glXCreateContext(Display *dpy, XVisualInfo *vis, GLXContext shareList, Bool direct)
 {
-  GLXFBConfig *acfgs = match_fbconfig(vis);
+  GLXFBConfig *acfgs = match_fbconfig(dpy, vis);
   GLXContext actx = primus.afns.glXCreateNewContext(primus.adpy, *acfgs, GLX_RGBA_TYPE, shareList, direct);
   primus.contexts.record(actx, *acfgs, shareList);
   return actx;
@@ -650,7 +650,7 @@ static GLXPbuffer lookup_pbuffer(Display *dpy, GLXDrawable draw, GLXContext ctx)
       XVisualInfo tmpl = {0}, *vis;
       tmpl.visualid = XVisualIDFromVisual(attrs.visual);
       die_if(!(vis = XGetVisualInfo(dpy, VisualIDMask, &tmpl, &nvis)), "no visuals");
-      di.fbconfig = *match_fbconfig(vis);
+      di.fbconfig = *match_fbconfig(dpy, vis);
       XFree(vis);
     }
     di.kind = di.XWindow;
@@ -801,7 +801,7 @@ GLXPixmap glXCreateGLXPixmap(Display *dpy, XVisualInfo *visual, Pixmap pixmap)
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   note_geometry(dpy, pixmap, &di.width, &di.height);
-  GLXFBConfig *acfgs = match_fbconfig(visual);
+  GLXFBConfig *acfgs = match_fbconfig(dpy, visual);
   di.fbconfig = *acfgs;
   return glxpix;
 }
