@@ -335,19 +335,20 @@ static void note_geometry(Display *dpy, Drawable draw, int *width, int *height)
   XGetGeometry(dpy, draw, &root, &x, &y, (unsigned *)width, (unsigned *)height, &bw, &d);
 }
 
-static GLXFBConfig get_dconfig(Display *dpy)
+static GLXFBConfig* get_dconfigs(Display *dpy)
 {
-  int ncfg, attrs[] = {GLX_DOUBLEBUFFER, GL_TRUE, None};
-  static GLXFBConfig *dconfigs = primus.dfns.glXChooseFBConfig(dpy, 0, attrs, &ncfg);
+  static const int attrs[] = {GLX_DOUBLEBUFFER, GL_TRUE, None};
+  int ncfg;
+  GLXFBConfig *dconfigs = primus.dfns.glXChooseFBConfig(dpy, 0, attrs, &ncfg);
   die_if(!dconfigs, "broken GLX on main X display\n");
-  return *dconfigs;
+  return dconfigs;
 }
 
-static bool test_drawpixels_fast(Display *dpy, GLXContext ctx)
+static bool test_drawpixels_fast(Display *dpy, GLXContext ctx, GLXFBConfig dconfig)
 {
   int width = 1920, height = 1080;
   int pbattrs[] = {GLX_PBUFFER_WIDTH, width, GLX_PBUFFER_HEIGHT, height, GLX_PRESERVED_CONTENTS, True, None};
-  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, get_dconfig(dpy), pbattrs);
+  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, dconfig, pbattrs);
   primus.dfns.glXMakeCurrent(dpy, pbuffer, ctx);
   GLuint pbo;
   primus.dfns.glGenBuffers(1, &pbo);
@@ -394,11 +395,13 @@ static void* display_work(void *vd)
   XSelectInput(ddpy, di.window, StructureNotifyMask);
   note_geometry(ddpy, di.window, &width, &height);
   di.update_geometry(width, height);
-  GLXContext context = primus.dfns.glXCreateNewContext(ddpy, get_dconfig(ddpy), GLX_RGBA_TYPE, NULL, True);
+  GLXFBConfig *dconfigs = get_dconfigs(ddpy);
+  GLXContext context = primus.dfns.glXCreateNewContext(ddpy, *dconfigs, GLX_RGBA_TYPE, NULL, True);
   die_if(!primus.dfns.glXIsDirect(ddpy, context),
 	 "failed to acquire direct rendering context for display thread\n");
   if (!primus.dispmethod)
-    primus.dispmethod = test_drawpixels_fast(ddpy, context) ? 2 : 1;
+    primus.dispmethod = test_drawpixels_fast(ddpy, context, *dconfigs) ? 2 : 1;
+  XFree(dconfigs);
   primus.dfns.glXMakeCurrent(ddpy, di.window, context);
   bool use_textures = (primus.dispmethod == 1);
   if (use_textures)
@@ -738,7 +741,9 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
 
 GLXWindow glXCreateWindow(Display *dpy, GLXFBConfig config, Window win, const int *attribList)
 {
-  GLXWindow glxwin = primus.dfns.glXCreateWindow(dpy, get_dconfig(dpy), win, attribList);
+  GLXFBConfig *dconfigs = get_dconfigs(dpy);
+  GLXWindow glxwin = primus.dfns.glXCreateWindow(dpy, *dconfigs, win, attribList);
+  XFree(dconfigs);
   DrawableInfo &di = primus.drawables[glxwin];
   di.kind = di.Window;
   di.fbconfig = config;
@@ -763,7 +768,9 @@ void glXDestroyWindow(Display *dpy, GLXWindow window)
 
 GLXPbuffer glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
 {
-  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, get_dconfig(dpy), attribList);
+  GLXFBConfig *dconfigs = get_dconfigs(dpy);
+  GLXPbuffer pbuffer = primus.dfns.glXCreatePbuffer(dpy, *dconfigs, attribList);
+  XFree(dconfigs);
   DrawableInfo &di = primus.drawables[pbuffer];
   di.kind = di.Pbuffer;
   di.fbconfig = config;
@@ -784,7 +791,9 @@ void glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf)
 
 GLXPixmap glXCreatePixmap(Display *dpy, GLXFBConfig config, Pixmap pixmap, const int *attribList)
 {
-  GLXPixmap glxpix = primus.dfns.glXCreatePixmap(dpy, get_dconfig(dpy), pixmap, attribList);
+  GLXFBConfig *dconfigs = get_dconfigs(dpy);
+  GLXPixmap glxpix = primus.dfns.glXCreatePixmap(dpy, *dconfigs, pixmap, attribList);
+  XFree(dconfigs);
   DrawableInfo &di = primus.drawables[glxpix];
   di.kind = di.Pixmap;
   di.fbconfig = config;
