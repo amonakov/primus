@@ -167,13 +167,12 @@ struct EarlyInitializer {
   {
 #ifdef BUMBLEBEE_SOCKET
     // Signal the Bumblebee daemon to bring up secondary X
-    errno = 0;
     int sock = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, getconf(BUMBLEBEE_SOCKET), sizeof(addr.sun_path));
-    connect(sock, (struct sockaddr *)&addr, sizeof(addr));
-    die_if(errno, "failed to connect to Bumblebee daemon: %s\n", strerror(errno));
+    die_if(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0,
+           "failed to connect to Bumblebee daemon: %s\n", strerror(errno));
     static char c[256];
     if (!getenv("PRIMUS_DISPLAY"))
     {
