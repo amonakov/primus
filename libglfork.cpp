@@ -173,11 +173,11 @@ struct EarlyInitializer {
     strncpy(addr.sun_path, getconf(BUMBLEBEE_SOCKET), sizeof(addr.sun_path));
     die_if(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0,
            "failed to connect to Bumblebee daemon: %s\n", strerror(errno));
-    static char c[256];
+    static char c[2048];
     if (!getenv("PRIMUS_DISPLAY"))
     {
       send(sock, "Q VirtualDisplay", strlen("Q VirtualDisplay") + 1, 0);
-      recv(sock, &c, 255, 0);
+      recv(sock, &c, sizeof(c) - 1, 0);
       die_if(memcmp(c, "Value: ", strlen("Value: ")), "unexpected query response\n");
       *strchrnul(c, '\n') = 0;
       *adpy_strp = strdup(c + 7);
@@ -185,7 +185,7 @@ struct EarlyInitializer {
     if (!getenv("PRIMUS_libGLa"))
     {
       send(sock, "Q LibraryPath", strlen("Q LibraryPath") + 1, 0);
-      recv(sock, &c, 255, 0);
+      recv(sock, &c, sizeof(c) - 1, 0);
       die_if(memcmp(c, "Value: ", strlen("Value: ")), "unexpected query response\n");
       *strchrnul(c, '\n') = 0;
       int npaths = 0;
@@ -202,7 +202,7 @@ struct EarlyInitializer {
       }
     }
     send(sock, "C", 1, 0);
-    recv(sock, &c, 255, 0);
+    recv(sock, &c, sizeof(c) - 1, 0);
     die_if(c[0] == 'N', "Bumblebee daemon reported: %s\n", c + 5);
     die_if(c[0] != 'Y', "failure contacting Bumblebee daemon\n");
     // the socket will be closed when the application quits, then bumblebee will shut down the secondary X
