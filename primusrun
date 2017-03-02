@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# primus needs this variable workaround for libglvnd enabled mesa
+export __GLVND_DISALLOW_PATCHING=1
+
 # Readback-display synchronization method
 # 0: no sync, 1: D lags behind one frame, 2: fully synced
 # export PRIMUS_SYNC=${PRIMUS_SYNC:-0}
