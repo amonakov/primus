@@ -359,7 +359,7 @@ static bool test_drawpixels_fast(Display *dpy, GLXContext ctx, GLXFBConfig dconf
   int iters = 0;
   do {
     primus.dfns.glBufferSubData(GL_PIXEL_UNPACK_BUFFER_EXT, 0, width*height*4, pixeldata);
-    primus.dfns.glDrawPixels(width, height, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+    primus.dfns.glDrawPixels(width, height, GL_BGRA, GL_UNSIGNED_BYTE, pixeldata);
     primus.dfns.glXSwapBuffers(dpy, pbuffer);
     iters++;
   } while (end > Profiler::get_timestamp());
